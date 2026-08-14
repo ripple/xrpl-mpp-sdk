@@ -64,7 +64,7 @@
   "packageManager": "pnpm@10.19.0",
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
-    "@biomejs/biome": "^2.4.8",
+    "@biomejs/biome": "^2.5.8",
     "@types/express": "^5.0.0",
     "@types/node": "^25.5.0",
     "dotenv": "^16.4.7",
@@ -73,7 +73,7 @@
     "mppx": "0.8.5",
     "picocolors": "^1.1.1",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.12",
     "typedoc": "^0.28.20",
     "typescript": "^5.9.3",
     "viem": "^2.54.6",
