@@ -1,0 +1,42 @@
+version: 2
+
+# Advisory monitoring for the two ecosystems that can reach a consumer: the npm
+# dependency tree, and the Actions this repository runs with write-capable
+# tokens at release time.
+#
+# The peer ranges are deliberately bounded (mppx <0.9.0, xrpl <5.0.0) because
+# mppx owns the HMAC challenge binding, so a major bump is a decision to make
+# explicitly rather than absorb. Dependabot will open those PRs; they must not be
+# merged without re-running the compatibility matrix.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for routine dev tooling, so it does not drown the security ones.
+      dev-tooling:
+        patterns:
+          - '@biomejs/*'
+          - 'typedoc'
+          - 'tsup'
+          - 'tsx'
+          - 'vitest'
+          - '@types/*'
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Majors on these two change the security surface: mppx carries the
+      # challenge binding, xrpl the signing and verification primitives. Handle
+      # them deliberately, not on a weekly cadence.
+      - dependency-name: mppx
+        update-types: ['version-update:semver-major']
+      - dependency-name: xrpl
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
