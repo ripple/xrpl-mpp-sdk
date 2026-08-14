@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+docs/
+_reference/
+# This project uses pnpm (see packageManager). Never commit an npm lockfile --
+# a stray package-lock.json is a source of dependency drift.
+package-lock.json
+.env*
+!.env.example
+!**/.env.example
+.DS_Store
+*.log
+# Local build and packaging artefacts.
+*.tgz
+*.tsbuildinfo
+# Working notes, reviews and design documents kept alongside the checkout but
+# outside the repository.
+dev-content/
+*.pem
+*.key
+.secret*

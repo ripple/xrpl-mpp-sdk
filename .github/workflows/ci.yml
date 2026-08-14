@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: every job here only reads the repo (install, type-check,
+# lint, test). No job needs write access, so pin the token down at the
+# workflow level.
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions pinned to full commit SHAs (version in the trailing comment) so
+      # a repointed or compromised mutable tag cannot inject unreviewed code.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:types
+      # The published surface is checked above against the build tsconfig; this
+      # covers test/, demo/ and examples/, which that one cannot reach because
+      # its rootDir is sdk/src.
+      - run: pnpm check:types:all
+      - run: pnpm lint
+      # XRPL family seeds are not a provider pattern, so platform push
+      # protection does not catch them. Scan independently of that setting.
+      - run: pnpm scan:secrets
+      - run: pnpm test
+      # Advisories are reported but do not fail the build: a transitive advisory
+      # with no available fix should not block unrelated work. Dependabot opens
+      # the PRs; this surfaces them in the log.
+      - run: pnpm audit --audit-level=high
+        continue-on-error: true
+
+  # The declared peer ranges are only meaningful if both ends are exercised.
+  # mppx in particular owns the HMAC challenge binding that the whole charge
+  # flow rests on, so a range we never test is a range we cannot defend.
+  compatibility:
+    runs-on: ubuntu-latest
+    needs: unit
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mppx: '0.8.0', xrpl: '4.0.0', label: lowest supported }
+          - { mppx: '0.8.5', xrpl: '4.6.0', label: highest tested }
+    name: compatibility (mppx ${{ matrix.mppx }}, xrpl ${{ matrix.xrpl }})
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Pin the peers to the matrix corner, then re-run the security and
+      # compliance suites. `add` deviates from the lockfile by design, so it
+      # needs no flag to say so -- and rejects --no-frozen-lockfile, which is an
+      # `install` option.
+      - run: pnpm add -D mppx@${{ matrix.mppx }} xrpl@${{ matrix.xrpl }}
+      - run: pnpm vitest run test/security/ test/compliance/
+
+  integration:
+    # Gated -- runs on push to main, on PRs labelled `run-integration`, and
+    # on manual dispatch. Failures here do NOT block PRs because the public
+    # devnet faucet can be flaky; rely on this job for end-to-end signal,
+    # not as a merge gate.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-integration'))
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration
+        env:
+          NODE_OPTIONS: '--no-warnings'
+        continue-on-error: false

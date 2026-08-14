@@ -1,0 +1,84 @@
+{
+  "name": "xrpl-mpp-sdk",
+  "author": "@krkmu",
+  "version": "0.1.0",
+  "description": "XRPL payment method for the Machine Payments Protocol (MPP)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./channel": {
+      "types": "./dist/channel/index.d.ts",
+      "default": "./dist/channel/index.js"
+    },
+    "./channel/client": {
+      "types": "./dist/channel/client/index.d.ts",
+      "default": "./dist/channel/client/index.js"
+    },
+    "./channel/server": {
+      "types": "./dist/channel/server/index.d.ts",
+      "default": "./dist/channel/server/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "pnpm build",
+    "check:types": "tsc --noEmit",
+    "check:types:all": "tsc -p tsconfig.check.json",
+    "docs": "typedoc",
+    "lint": "biome check --write sdk/ test/ demo/ examples/",
+    "scan:secrets": "node scripts/scan-secrets.mjs",
+    "audit": "pnpm audit --audit-level=high",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "agent-template": "tsx --tsconfig examples/agent-template/tsconfig.json examples/agent-template/src/run-demo.ts",
+    "agent-template:server": "tsx --tsconfig examples/agent-template/tsconfig.json examples/agent-template/src/server.ts",
+    "agent-template:agent": "tsx --tsconfig examples/agent-template/tsconfig.json examples/agent-template/src/agent.ts"
+  },
+  "peerDependencies": {
+    "mppx": ">=0.8.0 <0.9.0",
+    "xrpl": ">=4.0.0 <5.0.0"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "packageManager": "pnpm@10.19.0",
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
+    "@biomejs/biome": "^2.4.8",
+    "@types/express": "^5.0.0",
+    "@types/node": "^25.5.0",
+    "dotenv": "^16.4.7",
+    "express": "^5.0.0",
+    "hono": "^4.12.28",
+    "mppx": "0.8.5",
+    "picocolors": "^1.1.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typedoc": "^0.28.20",
+    "typescript": "^5.9.3",
+    "viem": "^2.54.6",
+    "vitest": "^3.2.4",
+    "xrpl": "4.6.0",
+    "xrpl-up": "0.2.0-beta.0"
+  }
+}

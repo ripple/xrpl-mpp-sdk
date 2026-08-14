@@ -1,0 +1,29 @@
+{
+  "name": "xrpl-mpp-agent-template",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Real-life template: a Claude agent pays a Claude-backed MPP service in XRP testnet to draft a LinkedIn post.",
+  "scripts": {
+    "demo": "tsx src/run-demo.ts",
+    "dev:server": "tsx watch src/server.ts",
+    "dev:agent": "tsx src/agent.ts",
+    "start": "tsx src/run-demo.ts",
+    "check:types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
+    "dotenv": "^16.4.7",
+    "express": "^5.0.0",
+    "mppx": ">=0.4.0",
+    "xrpl": ">=4.0.0",
+    "xrpl-mpp-sdk": "file:../..",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

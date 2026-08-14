@@ -1,0 +1,24 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "xrpl-mpp-sdk",
+  "entryPoints": [
+    "sdk/src/index.ts",
+    "sdk/src/client/index.ts",
+    "sdk/src/server/index.ts",
+    "sdk/src/channel/index.ts",
+    "sdk/src/channel/client/index.ts",
+    "sdk/src/channel/server/index.ts"
+  ],
+  "entryPointStrategy": "resolve",
+  "tsconfig": "./tsconfig.json",
+  "out": "docs/api",
+  "readme": "README.md",
+  "includeVersion": true,
+  "excludeInternal": true,
+  "excludePrivate": true,
+  "githubPages": false,
+  "navigationLinks": {
+    "npm": "https://www.npmjs.com/package/xrpl-mpp-sdk",
+    "MPP": "https://mpp.dev"
+  }
+}

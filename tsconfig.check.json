@@ -1,0 +1,19 @@
+{
+  // Type-check everything, emit nothing.
+  //
+  // tsconfig.json is the *build* config: its `rootDir` is sdk/src, so it cannot
+  // include test/, demo/ or examples/ without breaking the output layout. That
+  // left those trees unchecked, and a rename of the store-key helpers landed
+  // green while breaking every demo that read a key directly. This config exists
+  // so `pnpm check:types` covers the whole repository.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["sdk/src/**/*.ts", "test/**/*.ts", "demo/**/*.ts", "examples/**/*.ts"],
+  "exclude": ["node_modules", "dist", "_reference", "examples/agent-template"]
+}
