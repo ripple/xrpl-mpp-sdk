@@ -665,7 +665,7 @@ export function channel(parameters: channel.Parameters) {
         await new Promise((r) => setTimeout(r, 1000))
       }
 
-      if (!meta || meta.TransactionResult !== 'tesSUCCESS') {
+      if (meta?.TransactionResult !== 'tesSUCCESS') {
         throw verificationFailed('SUBMISSION_FAILED', 'PaymentChannelCreate not confirmed in time')
       }
 
@@ -1337,7 +1337,7 @@ export async function closeFromStore(params: {
   // Parse both store reads: this path signs an on-chain PaymentChannelClaim
   // from whatever cumulative it finds, so a malformed value must not reach it.
   const state = parseOrNull(StoredHighWater, await store.get(keys.channel(channelId)))
-  if (!state || !state.signature || BigInt(state.cumulative) === 0n) return null
+  if (!state?.signature || BigInt(state.cumulative) === 0n) return null
 
   const redeemed = parseOrNull(StoredRedeemed, await store.get(keys.channelRedeemed(channelId)))
   if (redeemed && BigInt(redeemed.cumulative) >= BigInt(state.cumulative)) return null
@@ -1423,7 +1423,7 @@ function startAutoCloseSweeper(args: {
             continue
           }
           const state = parseOrNull(StoredHighWater, await store.get(keys.channel(channelId)))
-          if (!state || !state.signature || BigInt(state.cumulative) === 0n) continue
+          if (!state?.signature || BigInt(state.cumulative) === 0n) continue
           const age = Date.now() - (state.timestamp ?? 0)
           if (age < config.idleMs) continue
 

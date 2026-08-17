@@ -63,22 +63,27 @@
   "sideEffects": false,
   "packageManager": "pnpm@10.19.0",
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.98.0",
-    "@biomejs/biome": "^2.4.8",
-    "@types/express": "^5.0.0",
-    "@types/node": "^25.5.0",
-    "dotenv": "^16.4.7",
-    "express": "^5.0.0",
-    "hono": "^4.12.28",
+    "@anthropic-ai/sdk": "^0.98.1",
+    "@biomejs/biome": "^2.5.8",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.2.1",
+    "hono": "^4.13.2",
     "mppx": "0.8.5",
     "picocolors": "^1.1.1",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.12",
     "typedoc": "^0.28.20",
     "typescript": "^5.9.3",
-    "viem": "^2.54.6",
+    "viem": "^2.55.17",
     "vitest": "^3.2.7",
     "xrpl": "4.6.0",
     "xrpl-up": "0.2.0-beta.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": ">=0.28.1"
+    }
   }
 }
