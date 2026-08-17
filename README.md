@@ -1094,10 +1094,37 @@ xrpl-mpp-sdk/
       src/                   #   server.ts + agent.ts + client.ts + run-demo.ts + env.ts + intent.ts + log.ts
       package.json           #   standalone deps (folder can be lifted out of the monorepo)
       .env.example
-  vitest.config.ts            # Unit suite + coverage threshold (80% on core modules)
+  vitest.config.ts            # Unit suite: offline, --expose-gc for the clone-hazard probe
   vitest.integration.config.ts # Devnet integration suite (single-fork, no coverage)
-  .github/workflows/ci.yml    # Two jobs: unit (every push/PR) + integration (gated)
+  .github/workflows/ci.yml    # unit + compatibility matrix (every push/PR), integration (gated)
 ```
+
+### The one dependency override, and when to drop it
+
+`package.json` pins `esbuild` to `>=0.28.1 <0.29.0` through `pnpm.overrides`.
+esbuild below 0.28.1 carries an advisory, and tsup -- the only thing that pulls
+it -- still declares `^0.27.0` with no newer release, so there is nothing to
+update. The override forces a version tsup does not claim to support; the build
+and the published tarball are verified against it, but that is an assumption held
+by hand rather than a guarantee.
+
+It is a maintenance commitment, and nothing will tell you when it lapses.
+Dependabot does not manage overrides: it will neither update this pin nor report
+it as redundant. Check with
+
+```sh
+npm view tsup dependencies.esbuild
+```
+
+and remove the override once that range starts at 0.28.1 or above. Leaving a stale
+pin in place eventually blocks a legitimate upgrade, and an open-ended one would
+silently accept a future major with breaking changes -- which is why this one is
+bounded to its minor rather than written as `>=0.28.1`.
+
+The agent template needed no override. It declares `viem` explicitly instead:
+undeclared, viem resolves to the oldest version satisfying mppx's peer range,
+which drags in a superseded `ws`. Declaring it the way the root package does is
+the fix, and it disappears on its own as mppx moves.
 
 ## Development
 
