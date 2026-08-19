@@ -441,11 +441,12 @@ jobs:
             MSG="${MSG} \n2) Review the package update PR and provide two approvals. DO NOT MERGE — ${EXECUTOR} will verify the package on npm and merge the approved PR. (${PR_URL})"
           fi
           MSG=$(printf '%b' "${MSG}")
-          curl -sS -X POST https://slack.com/api/chat.postMessage \
+          RESP="$(curl -sS -X POST https://slack.com/api/chat.postMessage \
             -H "Authorization: Bearer ${SLACK_TOKEN}" \
             -H "Content-Type: application/json; charset=utf-8" \
-            -d "$(jq -n --arg channel "${CHANNEL}" --arg text "${MSG}" '{channel:$channel, text:$text}')" \
-            | jq -er '.ok' >/dev/null
+            -d "$(jq -n --arg channel "${CHANNEL}" --arg text "${MSG}" '{channel:$channel, text:$text}')")"
+          echo "Slack response: ${RESP}"
+          printf '%s' "${RESP}" | jq -er '.ok' >/dev/null
 
   first_review:
     runs-on: ubuntu-latest
