@@ -339,7 +339,11 @@ jobs:
     permissions:
       # Same reasoning as pre_release: this job also checks out code, and a
       # job-level permissions block doesn't inherit the workflow default.
+      # actions: read is needed to list this run's artifacts via the API
+      # (Release summary for review step) -- without it the artifacts call
+      # comes back empty and `jq` fails iterating a null .artifacts.
       contents: read
+      actions: read
       pull-requests: write
     name: Print Test/Security scan result and invite Dev team to review
     env:
