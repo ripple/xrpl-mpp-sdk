@@ -36,6 +36,7 @@ import type {
   EscrowReference,
   FinishEscrowOptions,
 } from '../types.js'
+import { readValidatedCloseTimeMs } from './ledger-time.js'
 import { assertReserveCovers, getReserveState } from './reserves.js'
 
 // ---------------------------------------------------------------------------
@@ -204,10 +205,11 @@ export async function createEscrow(
  * one recorded on the escrow.
  *
  * Pre-flight:
- * - Refuse to submit when the escrow has a `FinishAfter` that is still
- *   in the future according to the local clock. The ledger would
- *   eventually reject with `tecNO_PERMISSION`, but a typed
- *   `ESCROW_NOT_READY` early is more actionable.
+ * - Refuse to submit when the escrow has a `FinishAfter` the latest validated
+ *   ledger has not yet closed past. The ledger would reject with
+ *   `tecNO_PERMISSION`, but a typed `ESCROW_NOT_READY` early is more
+ *   actionable. Judged on the ledger's clock, not the local one, because those
+ *   two disagree.
  * - When the escrow has a `Condition`, both `condition` and
  *   `fulfillment` are required. The SDK rejects upfront -- the ledger
  *   would surface `tecCRYPTOCONDITION_ERROR`.
@@ -229,7 +231,11 @@ export async function finishEscrow(
 
   if (escrow.FinishAfter !== undefined) {
     const finishAt = rippleTimeToUnixTime(escrow.FinishAfter)
-    if (Date.now() < finishAt) {
+    // The ledger judges FinishAfter against the close time of the ledger the
+    // transaction lands in, not against wall clock, and it compares strictly.
+    // Reading the local clock here disagrees with it in both directions.
+    const ledgerNow = await readValidatedCloseTimeMs(client)
+    if (ledgerNow <= finishAt) {
       throw new Error(
         `[ESCROW_NOT_READY] Escrow at (${owner}, sequence=${sequence}) cannot be finished ` +
           `until ${new Date(finishAt).toISOString()} (FinishAfter not yet reached).`,
@@ -279,8 +285,8 @@ export async function finishEscrow(
  * creator. Anyone can submit -- the funds always flow back to `Owner`.
  *
  * Pre-flight:
- * - Refuse to submit before `CancelAfter` according to the local clock.
- *   The ledger would surface `tecNO_PERMISSION`; a typed
+ * - Refuse to submit before the latest validated ledger has closed past
+ *   `CancelAfter`. The ledger would surface `tecNO_PERMISSION`; a typed
  *   `ESCROW_NOT_READY` early is more actionable.
  * - If the escrow was created with no `CancelAfter` it can never be
  *   cancelled -- we surface that as a permanent `ESCROW_NOT_READY`.
@@ -307,7 +313,9 @@ export async function cancelEscrow(
     )
   }
   const cancelAt = rippleTimeToUnixTime(escrow.CancelAfter)
-  if (Date.now() < cancelAt) {
+  // Same clock as the ledger uses, for the same reason as in finishEscrow.
+  const ledgerNow = await readValidatedCloseTimeMs(client)
+  if (ledgerNow <= cancelAt) {
     throw new Error(
       `[ESCROW_NOT_READY] Escrow at (${owner}, sequence=${sequence}) cannot be cancelled ` +
         `until ${new Date(cancelAt).toISOString()} (CancelAfter not yet reached).`,

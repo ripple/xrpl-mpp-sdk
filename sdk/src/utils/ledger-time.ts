@@ -12,7 +12,7 @@
  * blob a replay opportunity past the logical expiry.
  */
 
-import type { Client } from 'xrpl'
+import { type Client, rippleTimeToUnixTime } from 'xrpl'
 import { warnOnce } from './warn.js'
 
 /** XRPL nominal ledger-close interval. Real intervals jitter around this. */
@@ -43,6 +43,34 @@ export async function readValidatedLedgerIndex(client: Client): Promise<number> 
     )
   }
   return idx
+}
+
+/**
+ * Read the close time of the latest validated ledger, in Unix milliseconds.
+ *
+ * This is the clock the ledger itself uses to judge `FinishAfter` and
+ * `CancelAfter`: it compares them against the *parent close time* of the ledger
+ * a transaction lands in, never against wall clock. A pre-flight that reads the
+ * local clock instead disagrees with the ledger in both directions -- refusing an
+ * escrow the ledger would accept when the local clock lags, and submitting one it
+ * will reject with `tecNO_PERMISSION` when the local clock runs ahead.
+ *
+ * Close times are whole seconds, so the comparison at the call site has to be
+ * strict to match the ledger's own.
+ */
+export async function readValidatedCloseTimeMs(client: Client): Promise<number> {
+  const r = (await client.request({
+    command: 'ledger',
+    ledger_index: 'validated',
+  } as never)) as { result?: { ledger?: { close_time?: number } } }
+  const closeTime = r.result?.ledger?.close_time
+  if (typeof closeTime !== 'number' || !Number.isFinite(closeTime)) {
+    throw new Error(
+      '[SUBMISSION_FAILED] the node did not report a close time for the latest validated ledger. ' +
+        'It may still be syncing, in which case its view of time cannot be trusted.',
+    )
+  }
+  return rippleTimeToUnixTime(closeTime)
 }
 
 /**

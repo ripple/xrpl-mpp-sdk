@@ -14,6 +14,8 @@ function mockClient(handlers: {
   accountInfo?: () => any
   serverState?: () => any
   ledgerEntry?: (params: any) => any
+  /** Close time of the latest validated ledger, in ripple seconds. */
+  ledgerCloseTime?: () => number
   accountObjects?: (params: any) => any
   submitAndWait?: (tx: any) => any
 }): any {
@@ -34,6 +36,16 @@ function mockClient(handlers: {
               },
             }
           )
+        // The escrow pre-flights judge FinishAfter and CancelAfter against the
+        // ledger's own clock, so a mock has to supply one. Defaults to now.
+        case 'ledger':
+          return {
+            result: {
+              ledger: {
+                close_time: handlers.ledgerCloseTime?.() ?? unixTimeToRippleTime(Date.now()),
+              },
+            },
+          }
         case 'ledger_entry':
           return handlers.ledgerEntry?.(params) ?? { result: { node: null } }
         case 'account_objects':
@@ -348,6 +360,58 @@ describe('finishEscrow', () => {
     })
     expect(captured.Condition).toBe(condition.toUpperCase())
     expect(captured.Fulfillment).toBe(fulfillment.toUpperCase())
+  })
+
+  it('judges FinishAfter on the ledger clock, not the local one', async () => {
+    // The case CI hit: the ledger has closed past FinishAfter while the local
+    // clock is still a moment short. Gating on Date.now() refused a finish the
+    // ledger would have accepted.
+    const wallet = Wallet.generate()
+    const finishAfter = unixTimeToRippleTime(Date.now() + 2_000)
+    const client = mockClient({
+      ledgerCloseTime: () => finishAfter + 4,
+      ledgerEntry: () => ({
+        result: {
+          node: {
+            Account: OWNER_ADDR,
+            Destination: Wallet.generate().classicAddress,
+            Amount: '5000000',
+            FinishAfter: finishAfter,
+          },
+        },
+      }),
+      submitAndWait: () => ({
+        result: { hash: 'F'.repeat(64), meta: { TransactionResult: 'tesSUCCESS' } },
+      }),
+    })
+
+    await expect(
+      finishEscrow(client, wallet, { owner: OWNER_ADDR, sequence: 1 }),
+    ).resolves.toMatchObject({ hash: 'F'.repeat(64) })
+  })
+
+  it('refuses while the ledger clock is still short, even if the local clock has passed', async () => {
+    // The inverse, which the local-clock version let through: the SDK submitted
+    // and the ledger answered tecNO_PERMISSION.
+    const wallet = Wallet.generate()
+    const finishAfter = unixTimeToRippleTime(Date.now() - 2_000)
+    const client = mockClient({
+      ledgerCloseTime: () => finishAfter - 4,
+      ledgerEntry: () => ({
+        result: {
+          node: {
+            Account: OWNER_ADDR,
+            Destination: Wallet.generate().classicAddress,
+            Amount: '5000000',
+            FinishAfter: finishAfter,
+          },
+        },
+      }),
+    })
+
+    await expect(finishEscrow(client, wallet, { owner: OWNER_ADDR, sequence: 1 })).rejects.toThrow(
+      /ESCROW_NOT_READY/,
+    )
   })
 })
 
