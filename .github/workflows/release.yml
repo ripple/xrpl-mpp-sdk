@@ -213,8 +213,10 @@ jobs:
 
       - name: Generate CycloneDX SBOM
         # cyclonedx-npm only understands package-lock.json; this repo uses
-        # pnpm, so use cdxgen, which reads pnpm-lock.yaml directly.
-        run: npx --yes @cyclonedx/cdxgen -t npm --output sbom.json
+        # pnpm, so use cdxgen, which reads pnpm-lock.yaml directly. Pin the
+        # spec version: cdxgen defaults to 1.7, which this pinned Trivy
+        # release can't decode ("invalid specification version").
+        run: npx --yes @cyclonedx/cdxgen -t npm --spec-version 1.5 --output sbom.json
 
       - name: Scan SBOM for vulnerabilities using Trivy
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
