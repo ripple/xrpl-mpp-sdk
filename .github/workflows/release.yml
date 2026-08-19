@@ -83,7 +83,9 @@ jobs:
             echo "❌ Release branch '$RELEASE_BRANCH' must start with 'release-' or 'release/' for stable releases." >&2
             exit 1
           fi
-          if [[ "$TRIGGER_BRANCH" != "main" ]]; then
+          # TEMP: relaxed for testing on add-release-pipeline before merge to main.
+          # Revert to the main-only check before this branch is merged.
+          if [[ "$TRIGGER_BRANCH" != "main" && "$TRIGGER_BRANCH" != "add-release-pipeline" ]]; then
             echo "❌ Release pipeline can only be triggered from the 'main' branch. Current branch: '$TRIGGER_BRANCH'." >&2
             exit 1
           fi
