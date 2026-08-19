@@ -12,6 +12,11 @@ on:
       npmjs_dist_tag:
         description: "npm distribution tag (see https://docs.npmjs.com/adding-dist-tags-to-packages)"
         default: "latest"
+  # TEMP: push trigger so this can be tested on add-release-pipeline without
+  # merging to main (workflow_dispatch requires the workflow to already be
+  # registered on the default branch). Remove before merging.
+  push:
+    branches: [add-release-pipeline]
 
 concurrency:
   group: release
@@ -44,9 +49,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          RELEASE_BRANCH: ${{ github.event.inputs.release_branch_name }}
+          # TEMP: fall back to push-event values so this works without
+          # workflow_dispatch inputs while testing on add-release-pipeline.
+          RELEASE_BRANCH: ${{ github.event.inputs.release_branch_name || github.ref_name }}
           TRIGGER_BRANCH: ${{ github.ref_name }}
-          NPM_DIST_TAG: ${{ github.event.inputs.npmjs_dist_tag }}
+          NPM_DIST_TAG: ${{ github.event.inputs.npmjs_dist_tag || 'test' }}
         run: |
           set -euo pipefail
           if [[ -z "$RELEASE_BRANCH" ]]; then
