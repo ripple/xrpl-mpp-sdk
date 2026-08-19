@@ -133,6 +133,10 @@ jobs:
     needs: [get_version, run_tests]
     name: Pre Release Pipeline for ${{ needs.get_version.outputs.package_version }}
     permissions:
+      # A job-level permissions block replaces the workflow-level defaults
+      # entirely, so contents: read must be repeated here or checkout can't
+      # clone this private repo.
+      contents: read
       issues: write
       pull-requests: write
     env:
@@ -331,6 +335,9 @@ jobs:
     if: ${{ always() && needs.pre_release.result == 'success' && needs.run_tests.result == 'success' }}
     needs: [get_version, run_tests, pre_release]
     permissions:
+      # Same reasoning as pre_release: this job also checks out code, and a
+      # job-level permissions block doesn't inherit the workflow default.
+      contents: read
       pull-requests: write
     name: Print Test/Security scan result and invite Dev team to review
     env:
