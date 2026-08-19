@@ -653,7 +653,7 @@ jobs:
             echo "No failed jobs detected; skipping notification."
             exit 0
           fi
-          MESSAGE="❌ Workflow failure for xrpl-mpp-sdk@${PKG_VERSION}. Release failed at: ${FAILED_JOBS}. For details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MESSAGE="❌ Workflow failure for xrpl-mpp-sdk@${PKG_VERSION}. Release failed at ${FAILED_JOBS}. For details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl -sS -X POST https://slack.com/api/chat.postMessage \
             -H "Authorization: Bearer $SLACK_TOKEN" \
             -H "Content-Type: application/json" \
