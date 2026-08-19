@@ -533,7 +533,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          # npm Trusted Publishing (OIDC) requires Node >=22.14.0 and is only
+          # implemented in the npm CLI, not pnpm -- see the "Publish to npm"
+          # step below, which uses `npm publish` for this reason.
+          node-version: '22'
           cache: pnpm
           registry-url: 'https://registry.npmjs.org/'
 
@@ -566,7 +569,11 @@ jobs:
             echo "Stable releases (tagged with 'latest') must use x.y.z SemVer. Found '${PKG_VERSION}'." >&2
             exit 1
           fi
-          pnpm publish "${PKG}" --provenance --access public --registry=https://registry.npmjs.org/ --tag "$NPM_DIST_TAG" --no-git-checks
+          # pnpm publish does not implement npm's Trusted Publishing (OIDC)
+          # handshake -- only the npm CLI does, and only >=11.5.1. Install it
+          # and publish the tarball pnpm already built with it instead.
+          npm i -g npm@11.6.0
+          npm publish "${PKG}" --provenance --access public --registry=https://registry.npmjs.org/ --tag "$NPM_DIST_TAG"
 
       - name: Ensure Git tag exists
         id: create_tag
