@@ -2,14 +2,6 @@
 
 XRP Ledger payment method for the [Machine Payments Protocol (MPP)](https://mpp.dev). Extends [mppx](https://github.com/wevm/mppx) with on-chain payments (XRP, IOUs, MPTs) and off-chain micropayments via PayChannels.
 
-## Disclaimer
-
-This code is provided **as is**, it's a prototype. It has **not been audited**, there is **no
-guarantee that it will be maintained**, and it should be considered **for
-test and educational purposes only** -- **not for Mainnet** or any
-deployment that handles real value. Forking and adapting it is encouraged;
-running it unmodified against live funds is not.
-
 ## Payment modes
 
 ### Charge (on-chain transfers)
