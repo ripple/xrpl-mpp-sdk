@@ -3,6 +3,10 @@
   "author": "@krkmu",
   "version": "0.0.0-beta.2",
   "description": "XRPL payment method for the Machine Payments Protocol (MPP)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ripple/xrpl-mpp-sdk.git"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
