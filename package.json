@@ -1,7 +1,7 @@
 {
   "name": "@shichengsh001/xrpl-mpp-sdk",
   "author": "@krkmu",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
   "description": "XRPL payment method for the Machine Payments Protocol (MPP)",
   "type": "module",
   "main": "./dist/index.js",

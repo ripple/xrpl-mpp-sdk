@@ -110,6 +110,14 @@ jobs:
             echo "With npmjs_dist_tag 'latest', version must be of the form x.y.z. Found '$VERSION'." >&2
             exit 1
           fi
+          # A beta/test release with a plain x.y.z version burns that exact
+          # version forever (npm never lets a published version be reused),
+          # blocking it from ever being the real stable release later. Require
+          # a prerelease suffix so beta and stable never collide on a version.
+          if [[ "${IS_BETA:-false}" == "true" ]] && ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.-]+$ ]]; then
+            echo "With a non-'latest' npmjs_dist_tag, version must include a prerelease suffix (e.g. x.y.z-beta.1). Found '$VERSION'." >&2
+            exit 1
+          fi
           echo "package_version=$VERSION" >> "$GITHUB_OUTPUT"
 
   run_tests:
