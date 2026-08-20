@@ -1,7 +1,7 @@
 {
-  "name": "@shichengsh001/xrpl-mpp-sdk",
+  "name": "xrpl-mpp-sdk",
   "author": "@krkmu",
-  "version": "0.0.0-beta.2",
+  "version": "0.1.0",
   "description": "XRPL payment method for the Machine Payments Protocol (MPP)",
   "repository": {
     "type": "git",

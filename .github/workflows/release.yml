@@ -83,9 +83,7 @@ jobs:
             echo "❌ Release branch '$RELEASE_BRANCH' must start with 'release-' or 'release/' for stable releases." >&2
             exit 1
           fi
-          # TEMP: relaxed for testing on add-release-pipeline before merge to main.
-          # Revert to the main-only check before this branch is merged.
-          if [[ "$TRIGGER_BRANCH" != "main" && "$TRIGGER_BRANCH" != "add-release-pipeline" ]]; then
+          if [[ "$TRIGGER_BRANCH" != "main" ]]; then
             echo "❌ Release pipeline can only be triggered from the 'main' branch. Current branch: '$TRIGGER_BRANCH'." >&2
             exit 1
           fi
@@ -329,7 +327,7 @@ jobs:
             -H "Authorization: Bearer ${SLACK_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
-                  --arg channel "#test-alert" \
+                  --arg channel "#xrpl-mpp-sdk" \
                   --arg text "${MESSAGE}" \
                   '{channel: $channel, text: $text}')"
 
@@ -428,7 +426,7 @@ jobs:
         if: always()
         env:
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
-          CHANNEL: "#test-alert"
+          CHANNEL: "#xrpl-mpp-sdk"
           EXECUTOR: ${{ github.triggering_actor || github.actor }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
@@ -483,7 +481,7 @@ jobs:
       - name: Send Sec team review request to Slack
         env:
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
-          CHANNEL: "#test-alert"
+          CHANNEL: "#xrpl-mpp-sdk"
           EXECUTOR: ${{ github.triggering_actor || github.actor }}
           PKG_VERSION: ${{ needs.get_version.outputs.package_version }}
           REPO: ${{ github.repository }}
@@ -622,7 +620,7 @@ jobs:
           curl -sS -X POST https://slack.com/api/chat.postMessage \
             -H "Authorization: Bearer ${SLACK_TOKEN}" \
             -H "Content-Type: application/json; charset=utf-8" \
-            -d "$(jq -n --arg channel '#test-alert' --arg text "${text}" '{channel:$channel, text:$text}')"
+            -d "$(jq -n --arg channel '#xrpl-mpp-sdk' --arg text "${text}" '{channel:$channel, text:$text}')"
 
   notify_failures:
     runs-on: ubuntu-latest
@@ -668,6 +666,6 @@ jobs:
             -H "Authorization: Bearer $SLACK_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
-                  --arg channel '#test-alert' \
+                  --arg channel '#xrpl-mpp-sdk' \
                   --arg text "${MESSAGE}" \
                   '{channel: $channel, text: $text}')"
