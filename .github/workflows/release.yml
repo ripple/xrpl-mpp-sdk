@@ -481,7 +481,7 @@ jobs:
       - name: Send Sec team review request to Slack
         env:
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
-          CHANNEL: "#xrpl-mpp-sdk"
+          CHANNEL: "#ripplex-security"
           EXECUTOR: ${{ github.triggering_actor || github.actor }}
           PKG_VERSION: ${{ needs.get_version.outputs.package_version }}
           REPO: ${{ github.repository }}
