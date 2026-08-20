@@ -328,7 +328,7 @@ jobs:
             -H "Authorization: Bearer ${SLACK_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
-                  --arg channel "#xrpl-mpp-sdk" \
+                  --arg channel "#test-alert" \
                   --arg text "${MESSAGE}" \
                   '{channel: $channel, text: $text}')"
 
@@ -427,7 +427,7 @@ jobs:
         if: always()
         env:
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
-          CHANNEL: "#xrpl-mpp-sdk"
+          CHANNEL: "#test-alert"
           EXECUTOR: ${{ github.triggering_actor || github.actor }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
@@ -482,7 +482,7 @@ jobs:
       - name: Send Sec team review request to Slack
         env:
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
-          CHANNEL: "#xrpl-mpp-sdk"
+          CHANNEL: "#test-alert"
           EXECUTOR: ${{ github.triggering_actor || github.actor }}
           PKG_VERSION: ${{ needs.get_version.outputs.package_version }}
           REPO: ${{ github.repository }}
@@ -619,7 +619,7 @@ jobs:
           curl -sS -X POST https://slack.com/api/chat.postMessage \
             -H "Authorization: Bearer ${SLACK_TOKEN}" \
             -H "Content-Type: application/json; charset=utf-8" \
-            -d "$(jq -n --arg channel '#xrpl-mpp-sdk' --arg text "${text}" '{channel:$channel, text:$text}')"
+            -d "$(jq -n --arg channel '#test-alert' --arg text "${text}" '{channel:$channel, text:$text}')"
 
   notify_failures:
     runs-on: ubuntu-latest
@@ -665,6 +665,6 @@ jobs:
             -H "Authorization: Bearer $SLACK_TOKEN" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
-                  --arg channel '#xrpl-mpp-sdk' \
+                  --arg channel '#test-alert' \
                   --arg text "${MESSAGE}" \
                   '{channel: $channel, text: $text}')"
