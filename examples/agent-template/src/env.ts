@@ -16,6 +16,7 @@
  *      GCP Secret Manager, Vault, ...) and inject only at boot.
  * ===========================================================================
  */
+import { randomBytes } from 'node:crypto'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
@@ -67,11 +68,28 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
     throw new Error('AGENT_PRICE_DROPS_PER_1K_TOKENS must be > 0.')
   }
 
-  const mppSecretKey = process.env.MPP_SECRET_KEY ?? 'agent-template-dev-secret'
-  if (network === 'mainnet' && mppSecretKey === 'agent-template-dev-secret') {
+  // mppx requires at least 32 bytes and rejects anything shorter outright, so a
+  // short literal default would stop the server from booting at all. When the
+  // var is unset we generate an ephemeral key instead: the demo runs with no
+  // setup, and no weak constant ships with the template.
+  //
+  // Ephemeral is only acceptable for a single process. The challenge id is an
+  // HMAC over this key, so a value that changes on restart invalidates every
+  // challenge still in flight, and two instances with different keys cannot
+  // verify each other's credentials.
+  const mppSecretKeyFromEnv = process.env.MPP_SECRET_KEY
+  if (network === 'mainnet' && !mppSecretKeyFromEnv) {
     throw new Error(
-      'Refusing to start on mainnet with the default MPP_SECRET_KEY. Set a strong, ' +
-        'unique MPP_SECRET_KEY env var.',
+      'MPP_SECRET_KEY is required on mainnet. Generate one with `openssl rand -base64 32` ' +
+        'and load it from a secret manager. An ephemeral key would invalidate every ' +
+        'in-flight challenge on restart and cannot be shared across instances.',
+    )
+  }
+  const mppSecretKey = mppSecretKeyFromEnv ?? randomBytes(32).toString('base64')
+  if (!mppSecretKeyFromEnv) {
+    console.warn(
+      '[agent-template] MPP_SECRET_KEY is unset -- generated an ephemeral one for this ' +
+        'process. Set it in .env to keep challenges valid across restarts.',
     )
   }
 

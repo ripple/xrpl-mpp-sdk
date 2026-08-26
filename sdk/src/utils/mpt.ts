@@ -119,6 +119,7 @@ export async function setMPTHolding(
     TransactionType: 'MPTokenAuthorize',
     Account: wallet.classicAddress,
     MPTokenIssuanceID: mpt.mpt_issuance_id,
+    SourceTag: MPP_SOURCE_TAG,
   }
   const hash = await submitOrThrow(client, wallet, tx, 'MPT_AUTHORIZE_FAILED')
 
@@ -157,6 +158,7 @@ export async function removeMPTHolding(
     Account: wallet.classicAddress,
     MPTokenIssuanceID: mpt.mpt_issuance_id,
     Flags: TF_MPT_UNAUTHORIZE,
+    SourceTag: MPP_SOURCE_TAG,
   }
   const hash = await submitOrThrow(client, wallet, tx, 'MPT_AUTHORIZE_FAILED')
   return { status: 'removed', hash }
@@ -295,6 +297,7 @@ export async function authorizeMPTHolder(
     Account: issuer.classicAddress,
     MPTokenIssuanceID: mpt.mpt_issuance_id,
     Holder: holder,
+    SourceTag: MPP_SOURCE_TAG,
   }
   return { hash: await submitOrThrow(client, issuer, tx, 'MPT_AUTHORIZE_FAILED') }
 }
@@ -320,6 +323,7 @@ export async function issueMPTPayment(
     Account: issuer.classicAddress,
     Destination: to,
     Amount: { mpt_issuance_id: mpt.mpt_issuance_id, value: amount },
+    SourceTag: MPP_SOURCE_TAG,
   }
   return { hash: await submitOrThrow(client, issuer, tx, 'SUBMISSION_FAILED') }
 }

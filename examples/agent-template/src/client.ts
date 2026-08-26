@@ -14,8 +14,7 @@
 import { Receipt } from 'mppx'
 import { Mppx } from 'mppx/client'
 import type { ChargeProgressEvent, NetworkId, Wallet } from 'xrpl-mpp-sdk'
-import { charge } from 'xrpl-mpp-sdk/client'
-import { challengeSafeFetch } from '../../../sdk/src/client/fetch.js'
+import { challengeSafeFetch, charge } from 'xrpl-mpp-sdk/client'
 import type { PostBrief } from './intent.js'
 import type { GeneratedPost } from './server.js'
 

@@ -121,6 +121,15 @@ pnpm agent-template:agent \
 ```bash
 cp -r examples/agent-template ~/my-xrpl-agent
 cd ~/my-xrpl-agent
+
+# Two monorepo-only references have to go first, or `pnpm install` fails:
+#   1. package.json depends on "xrpl-mpp-sdk": "file:../..", which resolves to
+#      the parent directory once the folder has moved. Point it at the published
+#      version instead.
+#   2. tsconfig.json carries baseUrl / paths that map the SDK to ../../sdk/src.
+#      Delete both keys so the import resolves through node_modules.
+npm pkg set dependencies.xrpl-mpp-sdk="^0.1.0"
+
 pnpm install
 cp .env.example .env   # then fill in ANTHROPIC_API_KEY (and seeds if reusing wallets)
 pnpm dev:server        # one terminal -- boots the marketplace
@@ -128,10 +137,9 @@ pnpm dev:agent         # another terminal -- runs the agent once and exits
 # (or: pnpm start  -- spawns the server + runs the agent in one go)
 ```
 
-Before publishing the standalone copy, delete the `baseUrl` / `paths`
-keys in `tsconfig.json` (they're monorepo-only) and keep
-`"xrpl-mpp-sdk"` in `package.json` resolving to the published npm
-version instead of the local `file:../..`.
+`MPP_SECRET_KEY` is optional on testnet -- left unset, the template generates an
+ephemeral key per process. Set it before running anything that has to survive a
+restart, and it is required on mainnet.
 
 ## Wallet management
 
