@@ -35,10 +35,10 @@ importers:
         version: 5.2.1
       hono:
         specifier: ^4.13.2
-        version: 4.13.2
+        version: 4.13.3
       mppx:
         specifier: 0.8.5
-        version: 0.8.5(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.4.3))(express@5.2.1)(hono@4.13.2)(typescript@5.9.3)(viem@2.55.17(typescript@5.9.3)(zod@4.4.3))
+        version: 0.8.5(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.4.3))(express@5.2.1)(hono@4.13.3)(typescript@5.9.3)(viem@2.55.17(typescript@5.9.3)(zod@4.4.3))
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
@@ -1023,8 +1023,8 @@ packages:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
 
-  hono@4.13.2:
-    resolution: {integrity: sha512-JydRilDRkYBQMt9qR9U92mXxmbGqsqSn/IKOrh4e7/gEbn+0zSr8igTu0obwJoNGN4sez28DIql7FBHWydoJpA==}
+  hono@4.13.3:
+    resolution: {integrity: sha512-r8AO2mYHoLxSHkgafNeC/BXyb2vWRxD3jem4Ts+ptav8oTG5FIRifAjuJEmZI4bSvvc2ns0GxmIYiZnHqN3mMw==}
     engines: {node: '>=16.9.0'}
 
   hono@4.13.3:
@@ -2633,7 +2633,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.13.2: {}
+  hono@4.13.3: {}
 
   hono@4.13.3:
     optional: true
@@ -2833,7 +2833,7 @@ snapshots:
       pkg-types: 1.3.1
       ufo: 1.6.4
 
-  mppx@0.8.5(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.4.3))(express@5.2.1)(hono@4.13.2)(typescript@5.9.3)(viem@2.55.17(typescript@5.9.3)(zod@4.4.3)):
+  mppx@0.8.5(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@4.4.3))(express@5.2.1)(hono@4.13.3)(typescript@5.9.3)(viem@2.55.17(typescript@5.9.3)(zod@4.4.3)):
     dependencies:
       '@stripe/stripe-js': 9.8.0
       eventsource-parser: 3.1.0
@@ -2844,7 +2844,7 @@ snapshots:
     optionalDependencies:
       '@modelcontextprotocol/sdk': 1.27.1(@cfworker/json-schema@4.1.1)(zod@4.4.3)
       express: 5.2.1
-      hono: 4.13.2
+      hono: 4.13.3
     transitivePeerDependencies:
       - typescript
 
