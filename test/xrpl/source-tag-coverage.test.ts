@@ -1,4 +1,5 @@
-import { globSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { MPP_SOURCE_TAG } from '../../sdk/src/constants.js'
 
@@ -18,8 +19,18 @@ import { MPP_SOURCE_TAG } from '../../sdk/src/constants.js'
 /** Transaction builders are object literals with a `TransactionType` field. */
 const BUILDER = /TransactionType:\s*'(\w+)'/g
 
-function sourceFiles(): string[] {
-  return globSync('sdk/src/**/*.ts').filter((f) => !f.endsWith('.d.ts'))
+/**
+ * Walked rather than globbed: `fs.globSync` only exists from Node 22, and CI runs
+ * 20, so a glob here passes locally and fails there.
+ */
+function sourceFiles(dir = 'sdk/src'): string[] {
+  const found: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) found.push(...sourceFiles(path))
+    else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) found.push(path)
+  }
+  return found
 }
 
 describe('SourceTag attribution', () => {
