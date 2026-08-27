@@ -220,8 +220,7 @@ function startServerSubprocess(port: number): Promise<ServerHandle> {
         rejectStart(
           new Error(
             `Server subprocess exited with code ${code} before printing "listening on". ` +
-              `Check the [server!] lines above for the underlying error. ` +
-              `Most common cause: ANTHROPIC_API_KEY missing or invalid.`,
+              `The underlying error is in the [server!] lines above.`,
           ),
         )
       }

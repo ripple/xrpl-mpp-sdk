@@ -86,7 +86,7 @@ Three credential actions:
 ## Install
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/ripple/xrpl-mpp-sdk.git
 cd xrpl-mpp-sdk
 pnpm install
 pnpm build
@@ -276,21 +276,49 @@ const data = await response.json()
 
 ### Server (channel)
 
+Same two call sites as charge: the **method instance** at startup, and the
+**per-request invocation** at the 402 point.
+
+The method instance needs the funder's `publicKey`, and the per-request call
+needs the `channelId`. Neither is something the server invents -- both come from
+the client, which opens the channel on-chain and then tells the server about it.
+How that arrives is up to you: the demos use a small `POST /setup` endpoint
+(`demo/channel-server.ts`), and the `open` action lets it flow through the 402
+itself (`demo/channel-server-open.ts`), with no side channel at all.
+
 ```ts
 import { Mppx, Store } from 'mppx/server'
 import { channel } from 'xrpl-mpp-sdk/channel/server'
 
+// ── Method instance (set up once, per funder) ───────────────────────────
 const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
   methods: [
     channel({
-      publicKey: 'ED...',      // channel funder's public key
+      publicKey: 'ED...',      // channel funder's public key, from the client
+      recipient: 'rYourAddress...', // the address the channel must pay
       network: 'testnet',
       store: Store.memory(),   // tracks cumulative amounts (development only)
       storeDurability: 'process-local',
     }),
   ],
 })
+
+// ── Per-request ─────────────────────────────────────────────────────────
+// Note the key is `xrpl/session`: `session` is the canonical MPP wire intent,
+// and `channel` is only an alias on the server wrapper. `amount` is the
+// increment charged for this request, not the cumulative total -- the server
+// tracks that itself.
+export async function handler(request: Request) {
+  const result = await mppx['xrpl/session']({
+    amount: '100000',
+    channelId: 'ABCD...',    // 64 hex, from the opened channel
+    recipient: 'rYourAddress...',
+  })(request)
+
+  if (result.status === 402) return result.challenge
+  return result.withReceipt(Response.json({ data: 'paid content' }))
+}
 ```
 
 ### Client (channel)
@@ -377,11 +405,11 @@ that for `snapshotInput`.
 | Path | Exports |
 |---|---|
 | `xrpl-mpp-sdk` | Methods, ChannelMethods, Wallet (high-level wallet API), constants (RPC/faucet/explorer URLs, `XRP`, `XRPL_NETWORK_IDS`, `XRP_DECIMALS`, `DEFAULT_TIMEOUT`, `BASE_RESERVE_DROPS`, `OWNER_RESERVE_DROPS`, `RLUSD_MAINNET`, `RLUSD_TESTNET`), toDrops, fromDrops, error helpers, types (incl. `NetworkId`, wallet/trustline option types), generatePreimageCondition |
-| `xrpl-mpp-sdk/client` | charge, xrpl, Mppx, challengeSafeFetch, bufferChallengeResponses |
-| `xrpl-mpp-sdk/server` | charge, xrpl, Mppx, Store, Expires |
+| `xrpl-mpp-sdk/client` | charge, xrpl, Mppx, Wallet, challengeSafeFetch, bufferChallengeResponses |
+| `xrpl-mpp-sdk/server` | charge, prepareRecipient, xrpl, Mppx, Store, Expires, Wallet, sqlStore, sqlSchema, sqlReclaim, dynamodbStore, assertCredentialHeaderSize, DEFAULT_MAX_CREDENTIAL_HEADER_BYTES |
 | `xrpl-mpp-sdk/channel` | channel (schema), ChannelStream, ChannelSession |
-| `xrpl-mpp-sdk/channel/client` | channel, openChannel, fundChannel, xrpl, Mppx |
-| `xrpl-mpp-sdk/channel/server` | channel, close, ChannelDisputeState, xrpl, Mppx, Store, Expires |
+| `xrpl-mpp-sdk/channel/client` | channel, openChannel, fundChannel, prepareOpenChannelTransaction, xrpl, Mppx, Wallet |
+| `xrpl-mpp-sdk/channel/server` | channel, close, closeFromStore, ChannelDisputeState, ChannelLookup, PayChannelLedgerEntry, xrpl, Mppx, Store, Expires, Wallet, sqlStore, sqlSchema, sqlReclaim, dynamodbStore, assertCredentialHeaderSize, DEFAULT_MAX_CREDENTIAL_HEADER_BYTES |
 
 ### Server options (charge)
 
