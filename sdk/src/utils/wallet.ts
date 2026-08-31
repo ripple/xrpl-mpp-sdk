@@ -13,7 +13,7 @@
  *   right XRPL object internally.
  */
 
-import { Client, dropsToXrp, signPaymentChannelClaim, Wallet as XrplWallet } from 'xrpl'
+import { Client, signPaymentChannelClaim, Wallet as XrplWallet } from 'xrpl'
 import { type NetworkId, XRPL_RPC_URLS } from '../constants.js'
 import type {
   AcceptTokenResult,
@@ -31,6 +31,7 @@ import type {
   RefuseTokenResult,
   TokenHolding,
 } from '../types.js'
+import { dropsToXrpString } from './amount.js'
 import { isMPT } from './currency.js'
 import { cancelEscrow, createEscrow, finishEscrow, getEscrow, listEscrows } from './escrow.js'
 import {
@@ -320,7 +321,7 @@ export class Wallet {
    * off-chain voucher payloads.
    */
   signChannelClaim(channelId: string, drops: string): string {
-    const xrp = dropsToXrp(drops).toString()
+    const xrp = dropsToXrpString(drops)
     return signPaymentChannelClaim(channelId, xrp, this.#internal.privateKey)
   }
 
