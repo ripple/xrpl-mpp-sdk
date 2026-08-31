@@ -4,6 +4,7 @@ import { XRPL_RPC_URLS } from '../constants.js'
 import { fromTecResult, replayDetected, verificationFailed } from '../errors.js'
 import * as Methods from '../Methods.js'
 import type { ChargeServerConfig, XrplCurrency } from '../types.js'
+import { sameAmount } from '../utils/amount.js'
 import { challengeInvoiceId } from '../utils/binding.js'
 import { isIOU, isMPT, parseCurrency, serializeCurrency } from '../utils/currency.js'
 import { classicAddressFromDID } from '../utils/did.js'
@@ -869,7 +870,7 @@ export function validatePaymentFields(tx: any, expected: PaymentExpectations, me
     if (typeof txAmount !== 'string') {
       throw verificationFailed('AMOUNT_MISMATCH', 'Expected XRP (drops string), got object')
     }
-    if (txAmount !== expectedAmount) {
+    if (!sameAmount(txAmount, expectedAmount)) {
       throw verificationFailed(
         'AMOUNT_MISMATCH',
         `Expected ${expectedAmount} drops, got ${txAmount}`,
@@ -891,7 +892,7 @@ export function validatePaymentFields(tx: any, expected: PaymentExpectations, me
         `Expected issuer ${expectedCurrency.issuer}, got ${txAmount.issuer}`,
       )
     }
-    if (txAmount.value !== expectedAmount) {
+    if (!sameAmount(txAmount.value, expectedAmount)) {
       throw verificationFailed(
         'AMOUNT_MISMATCH',
         `Expected amount ${expectedAmount}, got ${txAmount.value}`,
@@ -907,7 +908,7 @@ export function validatePaymentFields(tx: any, expected: PaymentExpectations, me
         `Expected MPT ${expectedCurrency.mpt_issuance_id}, got ${txAmount.mpt_issuance_id}`,
       )
     }
-    if (txAmount.value !== expectedAmount) {
+    if (!sameAmount(txAmount.value, expectedAmount)) {
       throw verificationFailed(
         'AMOUNT_MISMATCH',
         `Expected amount ${expectedAmount}, got ${txAmount.value}`,
