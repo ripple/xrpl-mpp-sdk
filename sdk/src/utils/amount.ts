@@ -55,3 +55,38 @@ export function sameAmount(a: string, b: string): boolean {
   const right = canonicalDecimal(b)
   return right !== null && left === right
 }
+
+/** Drops per XRP. */
+const DROPS_PER_XRP = 1_000_000n
+
+/**
+ * Convert an integer drop count to the XRP-denominated decimal string that
+ * `signPaymentChannelClaim` and `verifyPaymentChannelClaim` sign over.
+ *
+ * xrpl.js's own `dropsToXrp` returns a JavaScript number, which is exact only
+ * below 2^53 drops -- 9,007,199,254 XRP. Above that the returned value differs
+ * from the drop count by a few drops, and a claim signed over it will not
+ * verify against the amount actually submitted on close, leaving earned value
+ * unredeemable.
+ *
+ * The threshold is far above any plausible channel. The conversion is done
+ * exactly regardless, because the failure is silent and integer arithmetic is
+ * not harder than the alternative.
+ *
+ * Both ends must agree: the client signs over this string and the server
+ * verifies against it, so any change here has to land on both sides at once.
+ */
+export function dropsToXrpString(drops: string | bigint): string {
+  const value = typeof drops === 'bigint' ? drops : BigInt(drops)
+  const negative = value < 0n
+  const magnitude = negative ? -value : value
+
+  const whole = magnitude / DROPS_PER_XRP
+  const fraction = magnitude % DROPS_PER_XRP
+
+  if (fraction === 0n) return `${negative ? '-' : ''}${whole}`
+  // Six digits, then drop the trailing zeros: 1_500_000 drops is "1.5", and
+  // 1 drop is "0.000001".
+  const padded = fraction.toString().padStart(6, '0').replace(/0+$/, '')
+  return `${negative ? '-' : ''}${whole}.${padded}`
+}

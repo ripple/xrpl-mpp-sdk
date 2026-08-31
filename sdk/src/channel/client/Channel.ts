@@ -1,8 +1,9 @@
 import { Credential, Method } from 'mppx'
-import { Client, dropsToXrp, signPaymentChannelClaim } from 'xrpl'
+import { Client, signPaymentChannelClaim } from 'xrpl'
 import { z } from 'zod/mini'
 import { MPP_SOURCE_TAG, type NetworkId, XRPL_RPC_URLS } from '../../constants.js'
 import type { ChannelClientConfig } from '../../types.js'
+import { dropsToXrpString } from '../../utils/amount.js'
 import { lastLedgerSequenceFromExpires, readCurrentLedgerIndex } from '../../utils/ledger-time.js'
 import { assertReserveCovers, getReserveState } from '../../utils/reserves.js'
 import { resolveWallet, type Wallet } from '../../utils/wallet.js'
@@ -60,7 +61,7 @@ export function channel(parameters: channel.Parameters) {
           throw new Error('openTransaction is required for action: open')
         }
         const initialAmount = amount
-        const initialXrp = dropsToXrp(initialAmount).toString()
+        const initialXrp = dropsToXrpString(initialAmount)
         // The real channelId is unknown until the server broadcasts the open
         // tx. Sign over an all-zero placeholder; the server verifies the
         // signature against the real channelId after extracting it from
@@ -93,7 +94,7 @@ export function channel(parameters: channel.Parameters) {
       const cumulativeStr = cumulativeAmount.toString()
 
       // signPaymentChannelClaim expects XRP, not drops -- it internally calls xrpToDrops.
-      const cumulativeXrp = dropsToXrp(cumulativeStr).toString()
+      const cumulativeXrp = dropsToXrpString(cumulativeStr)
       const signature = signPaymentChannelClaim(channelId, cumulativeXrp, wallet.privateKey)
 
       return Credential.serialize({

@@ -1,4 +1,5 @@
-import { dropsToXrp, signPaymentChannelClaim } from 'xrpl'
+import { signPaymentChannelClaim } from 'xrpl'
+import { dropsToXrpString } from '../utils/amount.js'
 import type { Wallet } from '../utils/wallet.js'
 
 /**
@@ -74,7 +75,7 @@ export class ChannelStream {
   sign(): ChannelClaim {
     const amount = this.cumulative.toString()
     // signPaymentChannelClaim expects XRP, not drops -- it internally calls xrpToDrops.
-    const amountXrp = dropsToXrp(amount).toString()
+    const amountXrp = dropsToXrpString(amount)
     const signature = signPaymentChannelClaim(this.channelId, amountXrp, this.#privateKey)
 
     this.lastSignature = signature

@@ -94,3 +94,39 @@ describe('validatePaymentFields accepts a ledger-normalised IOU value', () => {
     expect(sameAmount('1.10', '1.2')).toBe(false)
   })
 })
+
+describe('dropsToXrpString', () => {
+  it('matches xrpl.js below the float boundary', async () => {
+    const { dropsToXrp } = await import('xrpl')
+    const { dropsToXrpString } = await import('../../sdk/src/utils/amount.js')
+    for (const d of ['0', '1', '999999', '1000000', '1500000', '9007199254740990']) {
+      expect(dropsToXrpString(d), d).toBe(dropsToXrp(d).toString())
+    }
+  })
+
+  it('stays exact where xrpl.js does not', async () => {
+    const { dropsToXrp, xrpToDrops } = await import('xrpl')
+    const { dropsToXrpString } = await import('../../sdk/src/utils/amount.js')
+    // 2^53 drops and beyond: the number round trip changes the value.
+    for (const d of ['9007199254740991', '100000000000000001', '99999999999999999']) {
+      expect(xrpToDrops(dropsToXrpString(d)), `exact: ${d}`).toBe(d)
+      expect(xrpToDrops(dropsToXrp(d).toString()), `lossy: ${d}`).not.toBe(d)
+    }
+  })
+
+  it('round-trips through xrpToDrops for every shape', async () => {
+    const { xrpToDrops } = await import('xrpl')
+    const { dropsToXrpString } = await import('../../sdk/src/utils/amount.js')
+    for (const d of ['1', '10', '100000', '1000001', '1000010', '100000000000000000']) {
+      expect(xrpToDrops(dropsToXrpString(d)), d).toBe(d)
+    }
+  })
+
+  it('formats the fractional part the way the ledger expects', async () => {
+    const { dropsToXrpString } = await import('../../sdk/src/utils/amount.js')
+    expect(dropsToXrpString('1')).toBe('0.000001')
+    expect(dropsToXrpString('1500000')).toBe('1.5')
+    expect(dropsToXrpString('1000000')).toBe('1')
+    expect(dropsToXrpString('0')).toBe('0')
+  })
+})

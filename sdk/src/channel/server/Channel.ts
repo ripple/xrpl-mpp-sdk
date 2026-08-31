@@ -1,5 +1,5 @@
 import { Method, Receipt, type Store } from 'mppx'
-import { Client, decode, dropsToXrp, verifyPaymentChannelClaim } from 'xrpl'
+import { Client, decode, verifyPaymentChannelClaim } from 'xrpl'
 import { MPP_SOURCE_TAG, type NetworkId, XRPL_RPC_URLS } from '../../constants.js'
 import {
   channelClosed,
@@ -13,6 +13,7 @@ import {
   verificationFailed,
 } from '../../errors.js'
 import type { ChannelServerConfig } from '../../types.js'
+import { dropsToXrpString } from '../../utils/amount.js'
 import { classicAddressFromDID, classicAddressFromPublicKey } from '../../utils/did.js'
 import { type StoreKeys, storeKeys } from '../../utils/keys.js'
 import { assertTxExpiresWithinChallenge, readCurrentLedgerIndex } from '../../utils/ledger-time.js'
@@ -380,7 +381,7 @@ export function channel(parameters: channel.Parameters) {
     // ledger truth: `assertChannelParties` below refuses any channel whose
     // on-ledger PublicKey differs from it, so the two are necessarily equal for
     // a voucher that gets accepted.
-    const claimXrp = dropsToXrp(payload.amount).toString()
+    const claimXrp = dropsToXrpString(payload.amount)
     let isValid: boolean
     try {
       isValid = verifyPaymentChannelClaim(channelId, claimXrp, signature, publicKey)
@@ -692,7 +693,7 @@ export function channel(parameters: channel.Parameters) {
       const initialAmountBig = BigInt(initialAmount)
 
       if (initialAmountBig > 0n) {
-        const initialXrp = dropsToXrp(initialAmount).toString()
+        const initialXrp = dropsToXrpString(initialAmount)
         let sigValid: boolean
         try {
           sigValid = verifyPaymentChannelClaim(channelId, initialXrp, payload.signature, publicKey)
