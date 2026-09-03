@@ -10,6 +10,7 @@ import { challengeInvoiceId } from '../utils/binding.js'
 import { buildAmount, isIOU, parseCurrency } from '../utils/currency.js'
 import { lastLedgerSequenceFromExpires, readCurrentLedgerIndex } from '../utils/ledger-time.js'
 import { resolveIouPaymentExtras, validateSlippageBps } from '../utils/paths.js'
+import { paymentMovedMpt } from '../utils/schemas.js'
 import { runPreflight } from '../utils/validation.js'
 import { resolveWallet } from '../utils/wallet.js'
 
@@ -215,6 +216,7 @@ export function charge(parameters: charge.Parameters) {
             throw fromTecResult(
               meta?.TransactionResult ?? 'unknown',
               `Transaction failed: ${meta?.TransactionResult ?? 'unknown'}`,
+              { mpt: paymentMovedMpt(result.result) },
             )
           }
 

@@ -80,3 +80,14 @@ export function isIOU(currency: XrplCurrency): currency is IssuedCurrency {
 export function isMPT(currency: XrplCurrency): currency is MPToken {
   return typeof currency === 'object' && 'mpt_issuance_id' in currency
 }
+
+/**
+ * Whether a ledger `Amount` denotes an MPT.
+ *
+ * An MPT amount is the object form carrying `mpt_issuance_id`; XRP is a drops
+ * string and an issued currency carries `currency`/`issuer`. Used to narrow
+ * results whose meaning depends on what the payment moved.
+ */
+export function isMptAmount(amount: unknown): boolean {
+  return typeof amount === 'object' && amount !== null && 'mpt_issuance_id' in amount
+}

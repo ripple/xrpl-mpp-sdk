@@ -210,6 +210,45 @@ describe('push-mode verification', () => {
     ).rejects.toThrow(/InvoiceID mismatch/)
   })
 
+  it('reports a failed XRP payment as a destination refusal, not an MPT problem', async () => {
+    // The wiring, not the helper: verify() must derive the context from the
+    // transaction it just read. An XRP payment that fails tecNO_PERMISSION is
+    // the recipient's deposit-authorization setting, and naming MPT here would
+    // send the operator to the wrong account.
+    const store = Store.memory()
+    const challenge = challengeFor()
+    state.txResponses = [
+      nestedOk(challenge.id, { meta: { TransactionResult: 'tecNO_PERMISSION' } }),
+    ]
+
+    await expect(
+      method(store).verify({
+        credential: pushCredential(challenge) as any,
+        request: challenge.request,
+      }),
+    ).rejects.toThrow(/DESTINATION_PERMISSION_DENIED/)
+  })
+
+  it('reports the MPT cause when the failed payment carried an MPT', async () => {
+    const store = Store.memory()
+    const challenge = challengeFor()
+    const base = nestedOk(challenge.id)
+    state.txResponses = [
+      {
+        ...base,
+        meta: { TransactionResult: 'tecNO_PERMISSION' },
+        tx_json: { ...base.tx_json, Amount: { mpt_issuance_id: '00000012AB', value: '1' } },
+      },
+    ]
+
+    await expect(
+      method(store).verify({
+        credential: pushCredential(challenge) as any,
+        request: challenge.request,
+      }),
+    ).rejects.toThrow(/MPT_NOT_AUTHORIZED/)
+  })
+
   it('rejects a response that omits ledger_index', async () => {
     // ledger_index is what the transaction-age floor is computed from. Accepting
     // a response without it silently disables that floor, so an arbitrarily old
