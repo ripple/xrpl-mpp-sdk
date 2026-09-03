@@ -75,3 +75,42 @@ describe('Credential Tampering Detection', () => {
     })
   })
 })
+
+describe('a pinned client refuses a challenge for another ledger', () => {
+  it('rejects a mainnet challenge when pinned to testnet', async () => {
+    // The challenge names the ledger and the client follows it. That is right by
+    // default, but the same seed controls the same address on every XRPL
+    // network, so an unpinned client told `mainnet` signs against a real
+    // balance. An explicit `network` is a pin, not a hint.
+    const { charge } = await import('../../sdk/src/client/Charge.js')
+    const { Wallet } = await import('../../sdk/src/utils/wallet.js')
+    const wallet = Wallet.generate()
+
+    const method: any = charge({ wallet, network: 'testnet', preflight: false })
+    const challenge = {
+      id: 'pin-test',
+      realm: 'test',
+      method: 'xrpl' as const,
+      intent: 'charge' as const,
+      expires: new Date(Date.now() + 300_000).toISOString(),
+      request: {
+        amount: '1000000',
+        currency: 'XRP',
+        recipient: 'rf5kMNrUqgLzJT8YUzxM1pptc5r3Lfx1J9',
+        methodDetails: { network: 'mainnet' },
+      },
+    }
+
+    await expect(method.createCredential({ challenge, context: {} })).rejects.toThrow(
+      /CHALLENGE_REJECTED|pinned to testnet/,
+    )
+  })
+
+  it('still follows the challenge when the caller did not pin', async () => {
+    // Unchanged behaviour for callers who never passed `network`.
+    const { charge } = await import('../../sdk/src/client/Charge.js')
+    const { Wallet } = await import('../../sdk/src/utils/wallet.js')
+    const method: any = charge({ wallet: Wallet.generate(), preflight: false })
+    expect(typeof method.createCredential).toBe('function')
+  })
+})

@@ -133,3 +133,15 @@ async function verifyDestination(client: Client, address: string): Promise<void>
     throw err
   }
 }
+
+/**
+ * Largest cache lifetime that still leaves a usable settlement margin.
+ *
+ * The cache may hold `expiration`, which a funder can set or shorten at any
+ * time, so a voucher served from a maximally stale entry may be for a channel
+ * that entered its closing window one lifetime ago. The margin therefore only
+ * means something if it outlasts the staleness behind it; half is the bound.
+ */
+export function cappedMetadataTtlMs(requestedTtlMs: number, settlementMarginMs: number): number {
+  return Math.min(requestedTtlMs, Math.floor(settlementMarginMs / 2))
+}
