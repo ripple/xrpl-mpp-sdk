@@ -44,6 +44,10 @@ export function charge(parameters: charge.Parameters) {
     allowedCurrencies,
   } = parameters
 
+  // Distinguishes "explicitly chose testnet" from "did not say", which the
+  // destructured default cannot express. Only an explicit choice pins.
+  const pinnedNetwork = parameters.network
+
   if (!walletInput && !seed) {
     throw new Error('A wallet or seed is required for the client charge method.')
   }
@@ -84,7 +88,27 @@ export function charge(parameters: charge.Parameters) {
         )
       }
 
-      const network = (request.methodDetails?.network as NetworkId) ?? defaultNetwork
+      // The challenge names the ledger, and this client follows it. That is the
+      // right default -- the server knows which ledger it settles on -- but it
+      // means an unpinned client signs wherever it is told to.
+      //
+      // The same seed controls the same address on every XRPL network, so a
+      // client whose wallet holds real XRP will sign against that balance if a
+      // challenge declares `mainnet`, whatever it was configured for. A caller
+      // that passed `network` explicitly is pinning it, and a challenge naming
+      // another one is refused rather than followed.
+      const challengeNetwork = request.methodDetails?.network as NetworkId | undefined
+      if (
+        pinnedNetwork !== undefined &&
+        challengeNetwork !== undefined &&
+        challengeNetwork !== pinnedNetwork
+      ) {
+        throw challengeRejected(
+          `challenge is for the ${challengeNetwork} network but this client is pinned to ` +
+            `${pinnedNetwork}. Signing it would settle on a ledger the caller did not choose.`,
+        )
+      }
+      const network = challengeNetwork ?? defaultNetwork
       const rpcUrl = defaultRpcUrl ?? XRPL_RPC_URLS[network]
 
       const currency = parseCurrency(currencyStr)

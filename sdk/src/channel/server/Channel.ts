@@ -35,6 +35,7 @@ import {
   type StoreDurability,
 } from '../../utils/store.js'
 import { assertSecureRpcUrl } from '../../utils/transport.js'
+import { cappedMetadataTtlMs } from '../../utils/validation.js'
 import { resolveWallet, type Wallet } from '../../utils/wallet.js'
 import { warnOnce } from '../../utils/warn.js'
 import { channel as ChannelMethod } from '../Methods.js'
@@ -105,7 +106,7 @@ export function channel(parameters: channel.Parameters) {
     minSettleDelay = DEFAULT_MIN_SETTLE_DELAY_SECONDS,
     settlementMarginMs = DEFAULT_SETTLEMENT_MARGIN_MS,
     maxCredentialSize = DEFAULT_MAX_CREDENTIAL_SIZE,
-    channelMetadataTtlMs = 60_000,
+    channelMetadataTtlMs: channelMetadataTtlMsInput = 60_000,
     channelLookup,
     onDisputeDetected,
     onVoucherAccepted,
@@ -147,6 +148,26 @@ export function channel(parameters: channel.Parameters) {
       'channel-onchain-verification-disabled',
       '[xrpl-mpp-sdk] channel on-chain verification is disabled. Claims are accepted on signature ' +
         'alone, with no proof the channel exists, pays this recipient, or is funded.',
+    )
+  }
+
+  // The metadata cache may hold `expiration`, and a funder can set or shorten
+  // it at any time. Serving a voucher from a cache as old as the settlement
+  // margin therefore spends the whole margin on staleness: the channel may have
+  // entered its closing window up to one TTL ago, leaving no real time to
+  // redeem. The margin only means something if it exceeds how stale the data
+  // behind it can be, so the TTL is capped at half of it.
+  //
+  // Capped rather than rejected: an operator who tuned the TTL for latency
+  // should not fail to boot over it, and the safe value is computable.
+  const channelMetadataTtlMs = cappedMetadataTtlMs(channelMetadataTtlMsInput, settlementMarginMs)
+  if (channelMetadataTtlMs < channelMetadataTtlMsInput) {
+    warnOnce(
+      `channel-meta-ttl:${network}`,
+      `[xrpl-mpp-sdk] channelMetadataTtlMs ${channelMetadataTtlMsInput}ms exceeds half of ` +
+        `settlementMarginMs ${settlementMarginMs}ms, so cached channel state could consume the ` +
+        `whole margin. Capped to ${channelMetadataTtlMs}ms. Raise settlementMarginMs to keep a ` +
+        'longer cache.',
     )
   }
 

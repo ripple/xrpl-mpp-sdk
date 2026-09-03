@@ -8,7 +8,7 @@ import { sameAmount } from '../utils/amount.js'
 import { challengeInvoiceId } from '../utils/binding.js'
 import { isIOU, isMPT, parseCurrency, serializeCurrency } from '../utils/currency.js'
 import { classicAddressFromDID } from '../utils/did.js'
-import { type StoreKeys, storeKeys } from '../utils/keys.js'
+import { canonicalHex, type StoreKeys, storeKeys } from '../utils/keys.js'
 import {
   assertLedgerFinality,
   assertTxExpiresWithinChallenge,
@@ -833,7 +833,14 @@ export function validatePaymentFields(tx: any, expected: PaymentExpectations, me
   // Absent is tolerated in exactly one case, handled above: the expected value
   // is the binding this SDK derives and the mode does not require it, so a
   // third-party mppx client predating the field still works.
-  if (expectedInvoiceId && tx.InvoiceID !== undefined && tx.InvoiceID !== expectedInvoiceId) {
+  // Compared canonically: the schema accepts a lowercase invoiceId from an
+  // operator, while the ledger always reports Hash256 fields uppercase, so a
+  // case-sensitive compare refused a payment bound exactly as asked.
+  if (
+    expectedInvoiceId &&
+    tx.InvoiceID !== undefined &&
+    canonicalHex(tx.InvoiceID) !== canonicalHex(expectedInvoiceId)
+  ) {
     throw verificationFailed(
       'SUBMISSION_FAILED',
       `InvoiceID mismatch: expected ${expectedInvoiceId}, got ${tx.InvoiceID}`,

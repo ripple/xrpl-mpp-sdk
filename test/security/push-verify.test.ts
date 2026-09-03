@@ -58,7 +58,9 @@ const NETWORK = 'testnet'
 const TX_HASH = 'AB'.repeat(32)
 const keys = storeKeys(NETWORK)
 
-function challengeFor(options: { id?: string; expiresInMs?: number } = {}) {
+function challengeFor(
+  options: { id?: string; expiresInMs?: number; methodDetails?: Record<string, unknown> } = {},
+) {
   const id = options.id ?? `ch-${Math.random()}`
   return {
     id,
@@ -70,7 +72,7 @@ function challengeFor(options: { id?: string; expiresInMs?: number } = {}) {
       amount: '1000000',
       currency: 'XRP',
       recipient: RECIPIENT.address,
-      methodDetails: { network: NETWORK },
+      methodDetails: { network: NETWORK, ...options.methodDetails },
     },
   }
 }
@@ -167,6 +169,45 @@ describe('push-mode verification', () => {
       request: challenge.request,
     })
     expect(receipt.status).toBe('success')
+  })
+
+  it('accepts an operator invoiceId written in lowercase', async () => {
+    // The route schema accepts hex in either case, and rippled always reports
+    // Hash256 fields uppercase. Comparing the two literally refused a payment
+    // bound exactly as the challenge asked, so the compare is canonical.
+    const store = Store.memory()
+    const invoiceId = 'CD'.repeat(32)
+    const challenge = challengeFor({ methodDetails: { invoiceId: invoiceId.toLowerCase() } })
+    state.txResponses = [
+      nestedOk(challenge.id, {
+        tx_json: { ...nestedOk(challenge.id).tx_json, InvoiceID: invoiceId },
+      }),
+    ]
+
+    const receipt = await method(store).verify({
+      credential: pushCredential(challenge) as any,
+      request: challenge.request,
+    })
+    expect(receipt.status).toBe('success')
+  })
+
+  it('still rejects an InvoiceID that differs by more than case', async () => {
+    // The canonical compare must not become a blanket tolerance: binding is
+    // what stops an unrelated payment from satisfying this challenge.
+    const store = Store.memory()
+    const challenge = challengeFor({ methodDetails: { invoiceId: 'CD'.repeat(32) } })
+    state.txResponses = [
+      nestedOk(challenge.id, {
+        tx_json: { ...nestedOk(challenge.id).tx_json, InvoiceID: 'EF'.repeat(32) },
+      }),
+    ]
+
+    await expect(
+      method(store).verify({
+        credential: pushCredential(challenge) as any,
+        request: challenge.request,
+      }),
+    ).rejects.toThrow(/InvoiceID mismatch/)
   })
 
   it('rejects a response that omits ledger_index', async () => {

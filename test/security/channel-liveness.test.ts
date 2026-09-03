@@ -4,6 +4,7 @@ import {
   type PayChannelLedgerEntry,
   channel as serverChannel,
 } from '../../sdk/src/channel/server/Channel.js'
+import { cappedMetadataTtlMs } from '../../sdk/src/utils/validation.js'
 import { Wallet } from '../../sdk/src/utils/wallet.js'
 
 const NETWORK = 'testnet'
@@ -237,5 +238,53 @@ describe('channel liveness', () => {
       )
       expect(onVoucherAccepted.mock.calls[0][0].closesAt).toBeTypeOf('string')
     })
+  })
+})
+
+describe('metadata cache cannot consume the settlement margin', () => {
+  it('caps the TTL at half the margin', async () => {
+    // The cache may hold `expiration`, which a funder can set or shorten at any
+    // time. A voucher served from data as stale as the margin leaves no real
+    // time to redeem, so the margin has to outlast the staleness behind it.
+    const { channel } = await import('../../sdk/src/channel/server/Channel.js')
+    const { Store } = await import('mppx')
+    const { Wallet } = await import('../../sdk/src/utils/wallet.js')
+
+    const funder = Wallet.generate()
+    const recipient = Wallet.generate()
+
+    // Defaults are 60s TTL against a 60s margin, which is exactly the case the
+    // cap exists for. Constructing must not throw: the value is corrected, not
+    // rejected, so an operator who tuned for latency still boots.
+    expect(() =>
+      channel({
+        publicKey: funder.publicKey,
+        recipient: recipient.address,
+        network: 'testnet',
+        store: Store.memory(),
+        storeDurability: 'process-local',
+        verifyChannelOnChain: false,
+        allowUnverifiedChannels: true,
+        channelMetadataTtlMs: 600_000,
+        settlementMarginMs: 60_000,
+      }),
+    ).not.toThrow()
+  })
+
+  it('never lets the lifetime reach the margin', () => {
+    // The bound, stated directly: whatever an operator asks for, the value used
+    // is at most half the margin, so staleness can never eat all of it.
+    for (const [requested, margin, expected] of [
+      [600_000, 60_000, 30_000],
+      [60_000, 60_000, 30_000],
+      [30_000, 60_000, 30_000],
+      [1_000, 60_000, 1_000],
+      [600_000, 0, 0],
+      [600_000, 1, 0],
+    ] as const) {
+      const effective = cappedMetadataTtlMs(requested, margin)
+      expect(effective, `${requested}/${margin}`).toBe(expected)
+      expect(effective * 2, `${requested}/${margin}`).toBeLessThanOrEqual(margin)
+    }
   })
 })
