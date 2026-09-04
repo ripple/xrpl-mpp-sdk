@@ -18,7 +18,7 @@
  * It does not run the full two-process flow.
  *
  * Usage (illustrative -- prints the prepared tx blob):
- *   XRPL_SEED=sEdYourSeed npx tsx examples/channel-open-mpp.ts
+ *   XRPL_SEED=sEdYourSeed XRPL_DEST=rServerAddress npx tsx examples/channel-open-mpp.ts
  */
 
 import { Mppx } from 'mppx/client'
@@ -27,12 +27,16 @@ import { challengeSafeFetch } from '../sdk/src/client/fetch.js'
 import { Wallet } from '../sdk/src/index.js'
 
 const SEED = process.env.XRPL_SEED
-if (!SEED) {
-  console.error('Usage: XRPL_SEED=sEdXxx npx tsx examples/channel-open-mpp.ts')
+// The destination is required, not defaulted: a placeholder string reaches
+// xrpl's transaction validation and surfaces as a raw ValidationError, which
+// reads like a bug in the example rather than a missing variable.
+const SERVER_DESTINATION = process.env.XRPL_DEST
+if (!SEED || !SERVER_DESTINATION) {
+  console.error(
+    'Usage: XRPL_SEED=sEdXxx XRPL_DEST=rServerAddress npx tsx examples/channel-open-mpp.ts',
+  )
   process.exit(1)
 }
-
-const SERVER_DESTINATION = process.env.XRPL_DEST ?? 'rServerAddress...'
 
 // -- Step 1: Prepare the PaymentChannelCreate tx locally --
 //
