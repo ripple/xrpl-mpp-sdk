@@ -180,10 +180,10 @@ export function channel(parameters: channel.Parameters) {
 
   // Resolve auto-close: defaults to ON when a recipient wallet was provided.
   // The MPP spec (https://mpp.dev/payment-methods/tempo/session,
-  // /stellar/session) lets either party close the session. On XRPL the
-  // server-side "close" is a `PaymentChannelClaim` without `tfClose`
-  // followed by a `finalized` mark in the store -- this prevents further
-  // voucher acceptance, matching the spec's session-close semantics.
+  // /stellar/session) lets either party close the session, and so does the
+  // ledger: a `PaymentChannelClaim` with `tfClose` from the destination
+  // settles and deletes the channel in one transaction. The store is also
+  // marked `finalized`, which stops further vouchers without a ledger read.
   const recipientWallet =
     walletInput || walletSeed ? resolveWallet({ wallet: walletInput, seed: walletSeed }) : null
   const autoCloseConfig = resolveAutoCloseConfig(autoClose, recipientWallet !== null)
