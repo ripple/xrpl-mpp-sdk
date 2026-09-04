@@ -18,6 +18,7 @@
  */
 
 import { verificationFailed } from '../errors.js'
+import { canonicalHex } from './keys.js'
 
 /** Fields that decide what is owed. A disagreement on any of them is fatal. */
 const PRICED_FIELDS = ['amount', 'currency', 'recipient'] as const
@@ -30,6 +31,16 @@ const CODE_FOR_FIELD: Record<PricedField, 'AMOUNT_MISMATCH' | 'SUBMISSION_FAILED
   currency: 'SUBMISSION_FAILED',
   recipient: 'SUBMISSION_FAILED',
 }
+
+/**
+ * `methodDetails` keys the verifier acts on, so a route that sets one is making
+ * a demand rather than a suggestion.
+ *
+ * `network` is deliberately absent: the server settles on the network it was
+ * constructed with, not one a challenge names, so there is nothing to disagree
+ * about.
+ */
+const ENFORCED_METHOD_DETAILS = ['invoiceId', 'destinationTag', 'sourceTag'] as const
 
 /** Currency is a string for XRP and an object for IOU and MPT. */
 function describe(value: unknown): string {
@@ -76,6 +87,35 @@ export function assertRouteTermsMatch(
     throw verificationFailed(
       CODE_FOR_FIELD[field],
       `Challenge ${field} ${describe(presented)} does not match the ${describe(expected)} this route requires`,
+    )
+  }
+
+  // The priced fields decide what is owed; these decide where it lands and what
+  // it is bound to. A challenge issued for a route that sets neither tag, then
+  // presented to one that requires a DestinationTag, settles a payment the
+  // recipient cannot attribute to a sub-account.
+  const routeDetails = routeRequest.methodDetails as Record<string, unknown> | undefined
+  if (!routeDetails) return
+  const challengeDetails = (challengeRequest.methodDetails ?? {}) as Record<string, unknown>
+
+  for (const key of ENFORCED_METHOD_DETAILS) {
+    const expected = routeDetails[key]
+    if (expected === undefined) continue
+    const presented = challengeDetails[key]
+
+    // invoiceId is hex, and hex is case-insensitive as a value. Comparing it
+    // literally would refuse a route and a challenge that agree.
+    const same =
+      key === 'invoiceId'
+        ? typeof expected === 'string' &&
+          typeof presented === 'string' &&
+          canonicalHex(expected) === canonicalHex(presented)
+        : equal(expected, presented)
+    if (same) continue
+
+    throw verificationFailed(
+      'SUBMISSION_FAILED',
+      `Challenge ${key} ${describe(presented)} does not match the ${describe(expected)} this route requires`,
     )
   }
 }

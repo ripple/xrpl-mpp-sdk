@@ -249,6 +249,25 @@ describe('push-mode verification', () => {
     ).rejects.toThrow(/MPT_NOT_AUTHORIZED/)
   })
 
+  it('refuses a challenge that omits a DestinationTag the route requires', async () => {
+    // End to end through verify(), not just the comparison in isolation: the
+    // route terms have to actually reach it. This is the case the error
+    // showcase demonstrated being accepted.
+    const store = Store.memory()
+    const challenge = challengeFor()
+    state.txResponses = [nestedOk(challenge.id)]
+
+    await expect(
+      method(store).verify({
+        credential: pushCredential(challenge) as any,
+        request: {
+          ...challenge.request,
+          methodDetails: { ...challenge.request.methodDetails, destinationTag: 1234567 },
+        },
+      }),
+    ).rejects.toThrow(/destinationTag/)
+  })
+
   it('rejects a response that omits ledger_index', async () => {
     // ledger_index is what the transaction-age floor is computed from. Accepting
     // a response without it silently disables that floor, so an arbitrarily old
