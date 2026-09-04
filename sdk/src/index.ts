@@ -24,6 +24,7 @@ export {
   mapTecResult,
   replayDetected,
   TEC_RESULT_MAP,
+  type TecContext,
   verificationFailed,
   type XrplErrorCode,
 } from './errors.js'

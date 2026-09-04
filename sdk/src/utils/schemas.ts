@@ -24,6 +24,7 @@
  */
 
 import { z } from 'zod/mini'
+import { isMptAmount } from './currency.js'
 
 /** XRPL classic address: base58, 25-35 chars, `r` prefix. */
 export const ClassicAddress = z
@@ -178,4 +179,17 @@ export function parseOrNull<T>(
   if (value === null || value === undefined) return null
   const result = schema.safeParse(value)
   return result.success ? (result.data as T) : null
+}
+
+/**
+ * Whether the Payment in a node response moved an MPT.
+ *
+ * rippled nests Payment fields under `tx_json` (api_version 2) or puts them on
+ * the result root (api_version 1), and both are in circulation. Used to narrow
+ * engine results whose meaning depends on what the payment carried, so it
+ * answers false for anything it cannot read rather than guessing.
+ */
+export function paymentMovedMpt(raw: unknown): boolean {
+  const root = raw as { tx_json?: { Amount?: unknown }; Amount?: unknown } | null
+  return isMptAmount(root?.tx_json?.Amount ?? root?.Amount)
 }

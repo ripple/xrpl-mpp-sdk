@@ -86,8 +86,43 @@ describe('XRPL Charge', () => {
       expect(mapTecResult('tecPATH_PARTIAL')).toBe('PAYMENT_PATH_FAILED')
     })
 
-    it('maps tecNO_PERMISSION to MPT_NOT_AUTHORIZED', () => {
-      expect(mapTecResult('tecNO_PERMISSION')).toBe('MPT_NOT_AUTHORIZED')
+    // tecNO_PERMISSION has more than one cause and the result code does not say
+    // which. Without context the mapping must not pick one: reporting a
+    // recipient's deposit-authorization setting as an MPT problem points the
+    // operator at the wrong account.
+    it('maps tecNO_PERMISSION to DESTINATION_PERMISSION_DENIED without context', () => {
+      expect(mapTecResult('tecNO_PERMISSION')).toBe('DESTINATION_PERMISSION_DENIED')
+    })
+
+    it('narrows tecNO_PERMISSION to MPT_NOT_AUTHORIZED when the payment moved an MPT', () => {
+      expect(mapTecResult('tecNO_PERMISSION', { mpt: true })).toBe('MPT_NOT_AUTHORIZED')
+    })
+
+    it('does not narrow when the context says the payment was not an MPT', () => {
+      expect(mapTecResult('tecNO_PERMISSION', { mpt: false })).toBe('DESTINATION_PERMISSION_DENIED')
+    })
+
+    it('leaves every other result unaffected by context', () => {
+      // The narrowing is specific to one ambiguous result, not a general
+      // override that could reshape unrelated mappings.
+      for (const tec of ['tecPATH_DRY', 'tecNO_DST', 'tecMPT_NOT_AUTHORIZED', 'temBAD_AMOUNT']) {
+        expect(mapTecResult(tec, { mpt: true }), tec).toBe(mapTecResult(tec))
+      }
+    })
+
+    it('names deposit authorization as the usual cause without asserting it', () => {
+      const error = fromTecResult('tecNO_PERMISSION', 'Transaction ABC did not succeed')
+      expect(error.message).toContain('DESTINATION_PERMISSION_DENIED')
+      expect(error.message).toContain('lsfDepositAuth')
+      expect(error.message).toContain('usual cause')
+      // The recipient's configuration, not the payer's payment.
+      expect(error.message).toContain('not a problem with the payment')
+    })
+
+    it('still reports the MPT cause when the payment carried an MPT', () => {
+      const error = fromTecResult('tecNO_PERMISSION', 'submit failed', { mpt: true })
+      expect(error.message).toContain('MPT_NOT_AUTHORIZED')
+      expect(error.message).not.toContain('lsfDepositAuth')
     })
 
     it('maps tecINSUFF_FEE to INSUFFICIENT_FEE', () => {
@@ -131,7 +166,7 @@ describe('XRPL Charge', () => {
 
     it('creates VerificationFailedError for tecNO_PERMISSION', () => {
       const err = fromTecResult('tecNO_PERMISSION')
-      expect(err.message).toContain('MPT_NOT_AUTHORIZED')
+      expect(err.message).toContain('DESTINATION_PERMISSION_DENIED')
     })
 
     it('creates VerificationFailedError with SUBMISSION_FAILED for unknown tec', () => {

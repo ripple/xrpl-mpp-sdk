@@ -29,9 +29,15 @@ export const TEC_RESULT_MAP: Record<string, string> = {
   tefMASTER_DISABLED: 'INVALID_SIGNATURE',
   // Validation
   temBAD_AMOUNT: 'INVALID_AMOUNT',
-  // tecNO_PERMISSION on the MPT path: holder not authorised when the issuance
-  // has lsfMPTRequireAuth set.
-  tecNO_PERMISSION: 'MPT_NOT_AUTHORIZED',
+  // tecNO_PERMISSION has more than one cause and the code alone does not say
+  // which. On a Payment to an account with lsfDepositAuth set it means the
+  // destination refuses unsolicited funds; on the MPT path it means the holder
+  // is not authorised for an lsfMPTRequireAuth issuance. The table cannot tell
+  // them apart, so it gives the answer that holds either way -- `mapTecResult`
+  // refines it to MPT_NOT_AUTHORIZED when the caller knows the payment moved an
+  // MPT. Reporting a destination's configuration as an MPT problem sends the
+  // operator looking in the wrong place.
+  tecNO_PERMISSION: 'DESTINATION_PERMISSION_DENIED',
   // MPT-specific runtime failures observed at submit time. `tecMPT_LOCKED`
   // means the MPT issuance (or the holder's MPToken) was locked by the
   // issuer between path-finding and submit. `tecMPT_NOT_AUTHORIZED` means
@@ -72,6 +78,7 @@ export type XrplErrorCode =
   | 'SOURCE_MISMATCH'
   | 'SUBMISSION_FAILED'
   | 'MPT_NOT_AUTHORIZED'
+  | 'DESTINATION_PERMISSION_DENIED'
   | 'MPT_LOCKED'
   | 'MPT_HAS_BALANCE'
   | 'MPT_ISSUANCE_NOT_FOUND'
@@ -83,7 +90,14 @@ export type XrplErrorCode =
   | 'ESCROW_FAILED'
   | 'CHALLENGE_REJECTED'
 
-export function mapTecResult(tecResult: string): XrplErrorCode | undefined {
+/** What the failing transaction was moving, where that changes a result's meaning. */
+export type TecContext = {
+  /** True when the Payment carried an MPT, which narrows `tecNO_PERMISSION`. */
+  mpt?: boolean
+}
+
+export function mapTecResult(tecResult: string, context?: TecContext): XrplErrorCode | undefined {
+  if (tecResult === 'tecNO_PERMISSION' && context?.mpt) return 'MPT_NOT_AUTHORIZED'
   return TEC_RESULT_MAP[tecResult] as XrplErrorCode | undefined
 }
 
@@ -205,16 +219,35 @@ export function replayDetected(identifier: string): Errors.VerificationFailedErr
   })
 }
 
-/** Map a raw XRPL transaction engine result to the appropriate MPP error. */
+/**
+ * Map a raw XRPL transaction engine result to the appropriate MPP error.
+ *
+ * `context` is optional and only narrows results whose meaning depends on what
+ * the transaction carried. Pass it wherever the failing transaction is in hand.
+ */
 export function fromTecResult(
   tecResult: string,
   detail?: string,
+  context?: TecContext,
 ): Errors.VerificationFailedError | Errors.InsufficientBalanceError {
-  const code = mapTecResult(tecResult)
+  const code = mapTecResult(tecResult, context)
   const message = detail ?? `Transaction failed with ${tecResult}`
 
   if (code === 'INSUFFICIENT_BALANCE') {
     return insufficientBalance(message, tecResult)
+  }
+
+  // Naming the usual cause without asserting it: the result does not carry one,
+  // and only reading the destination's lsfDepositAuth flag would settle it.
+  if (code === 'DESTINATION_PERMISSION_DENIED') {
+    return verificationFailed(
+      code,
+      `${message}. The destination refused the payment. The usual cause is ` +
+        'deposit authorization (lsfDepositAuth) on the recipient account, which ' +
+        'accepts funds only from preauthorized senders. This is a configuration ' +
+        'condition on the recipient, not a problem with the payment.',
+      tecResult,
+    )
   }
 
   return verificationFailed(code ?? 'SUBMISSION_FAILED', message, tecResult)

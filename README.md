@@ -931,7 +931,9 @@ XRPL transaction engine results are mapped to MPP error types (RFC 9457 Problem 
 | `tecINSUFFICIENT_RESERVE` | `INSUFFICIENT_RESERVE` | VerificationFailedError |
 | `tecINSUFF_FEE` | `INSUFFICIENT_FEE` | VerificationFailedError |
 | `terINSUF_FEE_B` | `INSUFFICIENT_FEE` | VerificationFailedError |
-| `tecNO_PERMISSION` | `MPT_NOT_AUTHORIZED` | VerificationFailedError |
+| `tecNO_PERMISSION` | `DESTINATION_PERMISSION_DENIED`, or `MPT_NOT_AUTHORIZED` when the payment moved an MPT | VerificationFailedError |
+| `tecMPT_NOT_AUTHORIZED` | `MPT_NOT_AUTHORIZED` | VerificationFailedError |
+| `tecMPT_LOCKED` | `MPT_LOCKED` | VerificationFailedError |
 | `temBAD_AMOUNT` | `INVALID_AMOUNT` | VerificationFailedError |
 | `tefPAST_SEQ` | `SUBMISSION_FAILED` | VerificationFailedError |
 | `tefALREADY` | `SUBMISSION_FAILED` | VerificationFailedError |
@@ -948,6 +950,7 @@ Additional SDK-level error codes (raised before submit, no tecResult):
 - `TRUSTLINE_REQUIRES_AUTH` -- raised after a TrustSet against an issuer with `asfRequireAuth`; the trustline exists but cannot hold balance until the issuer authorizes it
 - `MPT_NOT_AUTHORIZED` (no holding) -- raised when no MPToken object exists and `autoMPTAuthorize` is false
 - `MPT_NOT_AUTHORIZED` (issuer side) -- raised after holder-side authorization when the issuance has `lsfMPTRequireAuth` and the issuer must run a paired MPTokenAuthorize
+- `DESTINATION_PERMISSION_DENIED` -- VerificationFailedError, the ledger returned `tecNO_PERMISSION` on a payment that did not move an MPT. The usual cause is deposit authorization (`lsfDepositAuth`) on the recipient, which accepts funds only from preauthorized senders. That is a setting on the recipient account, not a fault in the payment, so it is reported separately from the MPT case rather than folded into it
 
 Channel-specific:
 - `INVALID_SIGNATURE` -- InvalidSignatureError, claim signature does not verify against the channel's on-ledger `PublicKey`

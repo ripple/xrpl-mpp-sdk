@@ -18,7 +18,12 @@ import {
 } from '../utils/ledger-time.js'
 import { ensureMPTHolding } from '../utils/mpt.js'
 import { assertRouteTermsMatch } from '../utils/route.js'
-import { PaymentTransaction, TxResponse, type TxResponseShape } from '../utils/schemas.js'
+import {
+  PaymentTransaction,
+  paymentMovedMpt,
+  TxResponse,
+  type TxResponseShape,
+} from '../utils/schemas.js'
 import {
   assertAtomicStore,
   assertStoreDurability,
@@ -504,7 +509,9 @@ async function awaitFinality(
       const meta = result.meta ?? result.metaData
 
       if (meta?.TransactionResult && meta.TransactionResult !== 'tesSUCCESS') {
-        throw fromTecResult(meta.TransactionResult, `Transaction ${txHash} did not succeed`)
+        throw fromTecResult(meta.TransactionResult, `Transaction ${txHash} did not succeed`, {
+          mpt: paymentMovedMpt(response.result),
+        })
       }
 
       const txLedgerIndex = result.ledger_index
@@ -700,7 +707,9 @@ async function verifyPull(
   const engineResult = submitResult.result.engine_result
 
   if (engineResult !== 'tesSUCCESS' && engineResult !== 'terQUEUED') {
-    throw fromTecResult(engineResult, `Transaction submission failed: ${engineResult}`)
+    throw fromTecResult(engineResult, `Transaction submission failed: ${engineResult}`, {
+      mpt: paymentMovedMpt(submitResult.result),
+    })
   }
 
   if (txHash) {
