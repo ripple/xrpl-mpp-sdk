@@ -271,6 +271,36 @@ describe('metadata cache cannot consume the settlement margin', () => {
     ).not.toThrow()
   })
 
+  it('says nothing when nobody chose the lifetime', () => {
+    // The warning is about a caller's choice being overridden. Firing it for a
+    // configuration nobody set meant every channel server warned on startup,
+    // which is how operators learn to ignore warnings. No test caught it
+    // because every test passed an explicit value.
+    const warnings: string[] = []
+    const original = process.emitWarning
+    process.emitWarning = ((message: string | Error) => {
+      warnings.push(typeof message === 'string' ? message : message.message)
+    }) as typeof process.emitWarning
+
+    try {
+      const funder = Wallet.generate()
+      const recipient = Wallet.generate()
+      serverChannel({
+        publicKey: funder.publicKey,
+        recipient: recipient.address,
+        network: 'devnet',
+        store: Store.memory(),
+        storeDurability: 'process-local',
+        verifyChannelOnChain: false,
+        allowUnverifiedChannels: true,
+      })
+    } finally {
+      process.emitWarning = original
+    }
+
+    expect(warnings.filter((w) => w.includes('channelMetadataTtlMs'))).toEqual([])
+  })
+
   it('never lets the lifetime reach the margin', () => {
     // The bound, stated directly: whatever an operator asks for, the value used
     // is at most half the margin, so staleness can never eat all of it.

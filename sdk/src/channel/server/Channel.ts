@@ -72,6 +72,15 @@ const DEFAULT_MAX_CREDENTIAL_SIZE = 8 * 1024
 const DEFAULT_SETTLEMENT_MARGIN_MS = 60_000
 
 /**
+ * Default lifetime of the cached channel state.
+ *
+ * Half the default settlement margin, which is the ceiling
+ * {@link cappedMetadataTtlMs} enforces. Deriving it means the default is
+ * already at the limit rather than over it.
+ */
+const DEFAULT_CHANNEL_METADATA_TTL_MS = DEFAULT_SETTLEMENT_MARGIN_MS / 2
+
+/**
  * Creates an XRPL channel method for use on the **server**.
  *
  * Verifies off-chain PayChannel claims using verifyPaymentChannelClaim
@@ -107,7 +116,7 @@ export function channel(parameters: channel.Parameters) {
     minSettleDelay = DEFAULT_MIN_SETTLE_DELAY_SECONDS,
     settlementMarginMs = DEFAULT_SETTLEMENT_MARGIN_MS,
     maxCredentialSize = DEFAULT_MAX_CREDENTIAL_SIZE,
-    channelMetadataTtlMs: channelMetadataTtlMsInput = 60_000,
+    channelMetadataTtlMs: channelMetadataTtlMsInput,
     channelLookup,
     onDisputeDetected,
     onVoucherAccepted,
@@ -161,8 +170,14 @@ export function channel(parameters: channel.Parameters) {
   //
   // Capped rather than rejected: an operator who tuned the TTL for latency
   // should not fail to boot over it, and the safe value is computable.
-  const channelMetadataTtlMs = cappedMetadataTtlMs(channelMetadataTtlMsInput, settlementMarginMs)
-  if (channelMetadataTtlMs < channelMetadataTtlMsInput) {
+  // Defaulted from the margin rather than fixed, so the default can never be
+  // the thing the cap has to correct. The warning below is about a caller's
+  // choice being overridden; firing it for a configuration nobody chose would
+  // mean every channel server warns on startup, which teaches operators to
+  // ignore warnings.
+  const requestedTtlMs = channelMetadataTtlMsInput ?? DEFAULT_CHANNEL_METADATA_TTL_MS
+  const channelMetadataTtlMs = cappedMetadataTtlMs(requestedTtlMs, settlementMarginMs)
+  if (channelMetadataTtlMsInput !== undefined && channelMetadataTtlMs < channelMetadataTtlMsInput) {
     warnOnce(
       `channel-meta-ttl:${network}`,
       `[xrpl-mpp-sdk] channelMetadataTtlMs ${channelMetadataTtlMsInput}ms exceeds half of ` +
