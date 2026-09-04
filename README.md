@@ -919,7 +919,7 @@ XRPL transaction engine results are mapped to MPP error types (RFC 9457 Problem 
 
 | tecResult | SDK Code | MPP Error Type |
 |---|---|---|
-| `tecPATH_DRY` | `PAYMENT_PATH_FAILED` | VerificationFailedError |
+| `tecPATH_DRY` | `PAYMENT_PATH_FAILED` -- see the note below | VerificationFailedError |
 | `tecPATH_PARTIAL` | `PAYMENT_PATH_FAILED` | VerificationFailedError |
 | `tecUNFUNDED_PAYMENT` | `INSUFFICIENT_BALANCE` | InsufficientBalanceError |
 | `tecNO_DST` | `RECIPIENT_NOT_FOUND` | VerificationFailedError |
@@ -940,7 +940,9 @@ XRPL transaction engine results are mapped to MPP error types (RFC 9457 Problem 
 | `tefBAD_AUTH` | `INVALID_SIGNATURE` | VerificationFailedError |
 | `tefMASTER_DISABLED` | `INVALID_SIGNATURE` | VerificationFailedError |
 | `tecCRYPTOCONDITION_ERROR` | `ESCROW_INVALID_FULFILLMENT` | VerificationFailedError |
-| `tecNO_TARGET` | `ESCROW_NOT_FOUND` | VerificationFailedError |
+| `tecNO_TARGET` | `ESCROW_NOT_FOUND`, or `CHANNEL_NOT_FOUND` for a channel operation | VerificationFailedError |
+
+On the Payment path, `tecPATH_DRY` is the code that actually arrives for most issued-currency misconfigurations: a recipient with no trustline to the issuer, a freeze on either side of a trustline, and global freeze on the issuer all produce it (measured on testnet). `tecNO_LINE` and `tecFROZEN` name those conditions individually but belong to the offer path, so they do not reach a charge. The preflight is what turns them into precise errors before submit -- with `preflight: false`, expect `PAYMENT_PATH_FAILED` and read its message for the list of causes.
 
 Additional SDK-level error codes (raised before submit, no tecResult):
 - `SOURCE_MISMATCH` -- VerificationFailedError, the on-chain payer or channel funder does not match the credential's `did:pkh:xrpl:...` source

@@ -21,6 +21,7 @@ const CHANNEL_ID = 'A'.repeat(64)
 const PUBLIC_KEY = `ED${'0'.repeat(64)}`
 
 const submitted: any[] = []
+let engineResult = 'tesSUCCESS'
 
 vi.mock('xrpl', async (importOriginal) => {
   const actual = (await importOriginal()) as typeof xrplLib
@@ -47,7 +48,7 @@ vi.mock('xrpl', async (importOriginal) => {
     }
     async submitAndWait(tx: any) {
       submitted.push(tx)
-      return { result: { hash: 'C'.repeat(64), meta: { TransactionResult: 'tesSUCCESS' } } }
+      return { result: { hash: 'C'.repeat(64), meta: { TransactionResult: engineResult } } }
     }
   }
   return { ...actual, Client: FakeClient }
@@ -65,6 +66,7 @@ function walletFor(address: string) {
 
 async function closeAs(address: string) {
   submitted.length = 0
+  engineResult = 'tesSUCCESS'
   await close({
     channelId: CHANNEL_ID,
     wallet: walletFor(address),
@@ -109,5 +111,48 @@ describe('close() sets the flag that actually closes', () => {
     expect(tx.TransactionType).toBe('PaymentChannelClaim')
     expect(tx.Balance).toBe('1000000')
     expect(tx.Signature).toBe('AB'.repeat(32))
+  })
+})
+
+describe('a ledger failure on close is typed, not a raw result string', () => {
+  it('reports a vanished channel as CHANNEL_NOT_FOUND, not a missing escrow', async () => {
+    // tecNO_TARGET is the code for a missing Escrow and a missing PayChannel
+    // both. Now that a close deletes the entry, closing twice lands here, and
+    // "escrow not found" would point at the wrong ledger object entirely.
+    submitted.length = 0
+    engineResult = 'tecNO_TARGET'
+    await expect(
+      close({
+        channelId: CHANNEL_ID,
+        wallet: walletFor(DEST),
+        amount: '1000000',
+        signature: 'ab'.repeat(32),
+        channelPublicKey: PUBLIC_KEY,
+        network: 'testnet',
+      }),
+    ).rejects.toThrow(/CHANNEL_NOT_FOUND/)
+  })
+
+  it('never surfaces the engine result as a bare string', async () => {
+    submitted.length = 0
+    engineResult = 'tecUNFUNDED_PAYMENT'
+    let error: Error | undefined
+    try {
+      await close({
+        channelId: CHANNEL_ID,
+        wallet: walletFor(DEST),
+        amount: '1000000',
+        signature: 'ab'.repeat(32),
+        channelPublicKey: PUBLIC_KEY,
+        network: 'testnet',
+      })
+    } catch (thrown) {
+      error = thrown as Error
+    }
+
+    // A typed code the caller can branch on, with the raw result kept as
+    // context rather than as the whole message.
+    expect(error?.message).toContain('INSUFFICIENT_BALANCE')
+    expect(error?.message).not.toMatch(/^PaymentChannelClaim \(close\) failed/)
   })
 })

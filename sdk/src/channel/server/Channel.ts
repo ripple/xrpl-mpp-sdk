@@ -8,6 +8,7 @@ import {
   channelExhausted,
   channelNotFound,
   channelSettleDelayTooShort,
+  fromTecResult,
   invalidSignature,
   replayDetected,
   verificationFailed,
@@ -1297,7 +1298,15 @@ export async function close(params: {
     const meta = result.result.meta as any
 
     if (meta?.TransactionResult !== 'tesSUCCESS') {
-      throw new Error(`PaymentChannelClaim (close) failed: ${meta?.TransactionResult ?? 'unknown'}`)
+      // Typed rather than a raw Error carrying the engine result: a bare tec
+      // string is not something a caller can branch on, and `operation` is what
+      // lets tecNO_TARGET read as a missing channel rather than a missing
+      // escrow -- the two share the code.
+      throw fromTecResult(
+        meta?.TransactionResult ?? 'unknown',
+        `Closing channel ${channelId} did not succeed`,
+        { operation: 'channel' },
+      )
     }
 
     if (closeStore) {
