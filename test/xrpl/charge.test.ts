@@ -116,7 +116,38 @@ describe('XRPL Charge', () => {
       expect(error.message).toContain('lsfDepositAuth')
       expect(error.message).toContain('usual cause')
       // The recipient's configuration, not the payer's payment.
-      expect(error.message).toContain('not a problem with the payment')
+      expect(error.message).toContain('rather than a problem with')
+      // The ledger reports this code for an EscrowFinish before FinishAfter as
+      // well, so the message must not present deposit authorization as the
+      // only reading.
+      expect(error.message).toContain('EscrowFinish')
+      expect(error.message).toContain('does not say which')
+    })
+
+    it('reads tecNO_TARGET as a missing channel when told the operation was one', () => {
+      // The ledger reports tecNO_TARGET for a missing Escrow and a missing
+      // PayChannel alike. Reporting a deleted channel as a missing escrow sends
+      // the operator to the wrong ledger object, and closing a channel twice
+      // reaches this now that a close actually deletes the entry.
+      expect(mapTecResult('tecNO_TARGET', { operation: 'channel' })).toBe('CHANNEL_NOT_FOUND')
+    })
+
+    it('keeps the escrow reading without context and for escrow operations', () => {
+      expect(mapTecResult('tecNO_TARGET')).toBe('ESCROW_NOT_FOUND')
+      expect(mapTecResult('tecNO_TARGET', { operation: 'escrow' })).toBe('ESCROW_NOT_FOUND')
+      expect(mapTecResult('tecNO_TARGET', { operation: 'payment' })).toBe('ESCROW_NOT_FOUND')
+    })
+
+    it('names the causes tecPATH_DRY actually carries', () => {
+      // Measured on testnet: a missing recipient trustline, a frozen line and
+      // global freeze all surface as tecPATH_DRY. tecNO_LINE and tecFROZEN name
+      // those conditions but belong to the offer path and never arrive here, so
+      // this message is the only place an operator learns where to look.
+      const error = fromTecResult('tecPATH_DRY', 'Transaction ABC did not succeed')
+      expect(error.message).toContain('PAYMENT_PATH_FAILED')
+      expect(error.message).toContain('no trustline')
+      expect(error.message).toContain('freeze')
+      expect(error.message).toContain('rippling')
     })
 
     it('still reports the MPT cause when the payment carried an MPT', () => {

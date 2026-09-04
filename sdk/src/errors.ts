@@ -44,10 +44,14 @@ export const TEC_RESULT_MAP: Record<string, string> = {
   // the issuer never authorised this holder for an `RequireAuth` issuance.
   tecMPT_LOCKED: 'MPT_LOCKED',
   tecMPT_NOT_AUTHORIZED: 'MPT_NOT_AUTHORIZED',
-  // Escrow-specific. tecCRYPTOCONDITION_ERROR fires when the supplied
-  // fulfillment does not satisfy the on-chain condition (or is malformed).
-  // tecNO_TARGET on EscrowFinish/Cancel means the (Owner, OfferSequence)
-  // pair does not resolve to an Escrow ledger entry.
+  // tecCRYPTOCONDITION_ERROR fires when the supplied fulfillment does not
+  // satisfy the on-chain condition (or is malformed).
+  //
+  // tecNO_TARGET covers a missing Escrow *and* a missing PayChannel, so the
+  // table gives the escrow reading and `mapTecResult` narrows it to
+  // CHANNEL_NOT_FOUND when the caller says the operation was on a channel.
+  // Reporting a deleted channel as a missing escrow is how a close that raced
+  // another close reads today.
   tecCRYPTOCONDITION_ERROR: 'ESCROW_INVALID_FULFILLMENT',
   tecNO_TARGET: 'ESCROW_NOT_FOUND',
 }
@@ -94,10 +98,19 @@ export type XrplErrorCode =
 export type TecContext = {
   /** True when the Payment carried an MPT, which narrows `tecNO_PERMISSION`. */
   mpt?: boolean
+  /**
+   * Which ledger object the failing transaction acted on.
+   *
+   * `tecNO_TARGET` is reported for a missing Escrow *and* a missing PayChannel,
+   * so the code alone cannot say which was absent. Pass this wherever the
+   * operation is known.
+   */
+  operation?: 'payment' | 'channel' | 'escrow'
 }
 
 export function mapTecResult(tecResult: string, context?: TecContext): XrplErrorCode | undefined {
   if (tecResult === 'tecNO_PERMISSION' && context?.mpt) return 'MPT_NOT_AUTHORIZED'
+  if (tecResult === 'tecNO_TARGET' && context?.operation === 'channel') return 'CHANNEL_NOT_FOUND'
   return TEC_RESULT_MAP[tecResult] as XrplErrorCode | undefined
 }
 
@@ -242,10 +255,28 @@ export function fromTecResult(
   if (code === 'DESTINATION_PERMISSION_DENIED') {
     return verificationFailed(
       code,
-      `${message}. The destination refused the payment. The usual cause is ` +
-        'deposit authorization (lsfDepositAuth) on the recipient account, which ' +
-        'accepts funds only from preauthorized senders. This is a configuration ' +
-        'condition on the recipient, not a problem with the payment.',
+      `${message}. The sender lacks permission for this operation. On a ` +
+        'payment the usual cause is deposit authorization (lsfDepositAuth) on ' +
+        'the recipient, which accepts funds only from preauthorized senders -- a ' +
+        'configuration condition on the recipient rather than a problem with ' +
+        'the payment. The ledger also reports it for an EscrowFinish attempted ' +
+        'before FinishAfter. The result code does not say which.',
+      tecResult,
+    )
+  }
+
+  // Measured on testnet: an issued-currency Payment fails with tecPATH_DRY when
+  // the recipient has no trustline, when either side's line is frozen, and when
+  // the issuer has global freeze. The codes naming those conditions
+  // individually -- tecNO_LINE, tecFROZEN -- belong to the offer path and never
+  // reach here, so this result carries all of them and has to name them.
+  if (code === 'PAYMENT_PATH_FAILED') {
+    return verificationFailed(
+      code,
+      `${message}. No path could deliver the amount. For an issued currency the ` +
+        'usual causes are the recipient holding no trustline to the issuer, a ' +
+        'freeze on either side of a trustline, global freeze on the issuer, or ' +
+        'rippling not enabled on the issuer. The result code does not say which.',
       tecResult,
     )
   }
