@@ -344,7 +344,7 @@ export class Wallet {
       amount: string
       settleDelay: number
       publicKey?: string
-      cancelAfter?: number
+      cancelAfter?: Date | number | string
       expiresAt?: Date | number | string
     } & NetworkOptions,
   ): Promise<{ txBlob: string; txHash: string }> {
