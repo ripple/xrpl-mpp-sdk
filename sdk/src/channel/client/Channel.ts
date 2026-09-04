@@ -1,5 +1,5 @@
 import { Credential, Method } from 'mppx'
-import { Client, signPaymentChannelClaim } from 'xrpl'
+import { Client, signPaymentChannelClaim, unixTimeToRippleTime } from 'xrpl'
 import { z } from 'zod/mini'
 import { MPP_SOURCE_TAG, type NetworkId, XRPL_RPC_URLS } from '../../constants.js'
 import type { ChannelClientConfig } from '../../types.js'
@@ -120,6 +120,36 @@ export declare namespace channel {
  *
  * Creates a PaymentChannelCreate transaction and returns the channel ID.
  */
+/**
+ * Convert a channel deadline to ripple time.
+ *
+ * `CancelAfter` is ripple time on the wire -- seconds since 2000-01-01 -- and
+ * this used to take that value raw. A caller passing a Unix timestamp got a
+ * deadline thirty years out, silently, which defeats the one field whose whole
+ * purpose is to bound how long a channel can outlive its session.
+ *
+ * A `number` is therefore Unix milliseconds, matching `expiresAt` in the same
+ * options object and `cancelAfter` on the escrow helpers. A past deadline is
+ * rejected rather than submitted for the ledger to refuse.
+ */
+function channelCancelAfterToRippleTime(input: Date | number | string): number {
+  const unixMs =
+    input instanceof Date ? input.getTime() : typeof input === 'number' ? input : Date.parse(input)
+  if (!Number.isFinite(unixMs)) {
+    throw new Error(
+      `[INVALID_AMOUNT] PaymentChannelCreate \`cancelAfter\` is not a valid timestamp: ${String(input)}.`,
+    )
+  }
+  if (unixMs <= Date.now()) {
+    throw new Error(
+      `[INVALID_AMOUNT] PaymentChannelCreate \`cancelAfter\` must be in the future. Got ` +
+        `${new Date(unixMs).toISOString()}, now is ${new Date().toISOString()}. Note that a ` +
+        'number is Unix milliseconds here, not ripple time.',
+    )
+  }
+  return unixTimeToRippleTime(unixMs)
+}
+
 export async function openChannel(params: {
   /** Funder wallet. Preferred over `seed`. */
   wallet?: Wallet
@@ -129,7 +159,7 @@ export async function openChannel(params: {
   amount: string
   settleDelay: number
   publicKey?: string
-  cancelAfter?: number
+  cancelAfter?: Date | number | string
   network?: NetworkId
   rpcUrl?: string
 }): Promise<{ channelId: string; txHash: string }> {
@@ -192,7 +222,7 @@ export async function openChannel(params: {
     }
 
     if (cancelAfter) {
-      channelCreate.CancelAfter = cancelAfter
+      channelCreate.CancelAfter = channelCancelAfterToRippleTime(cancelAfter)
     }
 
     const result = await client.submitAndWait(channelCreate, { wallet: xrplWallet })
@@ -293,7 +323,7 @@ export async function prepareOpenChannelTransaction(params: {
    */
   publicKey?: string
   /** Optional `CancelAfter` (ripple time, seconds). */
-  cancelAfter?: number
+  cancelAfter?: Date | number | string
   /**
    * When set, caps the tx's `LastLedgerSequence` so it expires on-ledger
    * at or before this moment. Use the `challenge.expires` value here
@@ -357,7 +387,7 @@ export async function prepareOpenChannelTransaction(params: {
       SourceTag: MPP_SOURCE_TAG,
     }
     if (cancelAfter) {
-      tx.CancelAfter = cancelAfter
+      tx.CancelAfter = channelCancelAfterToRippleTime(cancelAfter)
     }
 
     const prepared = await client.autofill(tx)
