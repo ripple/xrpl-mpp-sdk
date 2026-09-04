@@ -92,3 +92,90 @@ describe('route terms', () => {
     )
   })
 })
+
+describe('methodDetails terms the route enforces', () => {
+  // The priced fields decide what is owed; these decide where it lands and what
+  // the payment is bound to. A server with two routes on one secret could
+  // otherwise have a challenge minted for the untagged route accepted on the
+  // tagged one, settling a payment the recipient cannot attribute.
+  const base = { amount: '1000000', currency: 'XRP', recipient: 'rRecipient' }
+
+  it('rejects a challenge with no tag on a route that requires one', () => {
+    expect(() =>
+      assertRouteTermsMatch(
+        { ...base, methodDetails: { network: 'testnet' } },
+        { ...base, methodDetails: { destinationTag: 1234567 } },
+      ),
+    ).toThrow(/destinationTag/)
+  })
+
+  it('rejects a challenge whose tag differs from the route', () => {
+    expect(() =>
+      assertRouteTermsMatch(
+        { ...base, methodDetails: { destinationTag: 7654321 } },
+        { ...base, methodDetails: { destinationTag: 1234567 } },
+      ),
+    ).toThrow(/destinationTag/)
+  })
+
+  it('rejects a mismatched sourceTag', () => {
+    expect(() =>
+      assertRouteTermsMatch(
+        { ...base, methodDetails: { sourceTag: 1 } },
+        { ...base, methodDetails: { sourceTag: 2 } },
+      ),
+    ).toThrow(/sourceTag/)
+  })
+
+  it('rejects a challenge bound to a different invoiceId', () => {
+    expect(() =>
+      assertRouteTermsMatch(
+        { ...base, methodDetails: { invoiceId: 'AB'.repeat(32) } },
+        { ...base, methodDetails: { invoiceId: 'CD'.repeat(32) } },
+      ),
+    ).toThrow(/invoiceId/)
+  })
+
+  it('accepts an invoiceId that agrees but is written in another case', () => {
+    // Hex is case-insensitive as a value. A literal compare here would refuse a
+    // route and a challenge that agree -- the same defect fixed in the store
+    // keys and the InvoiceID check.
+    expect(() =>
+      assertRouteTermsMatch(
+        { ...base, methodDetails: { invoiceId: 'ab'.repeat(32) } },
+        { ...base, methodDetails: { invoiceId: 'AB'.repeat(32) } },
+      ),
+    ).not.toThrow()
+  })
+
+  it('accepts when the route sets no methodDetails', () => {
+    expect(() =>
+      assertRouteTermsMatch({ ...base, methodDetails: { destinationTag: 42 } }, { ...base }),
+    ).not.toThrow()
+  })
+
+  it('ignores keys the route leaves unset', () => {
+    // A route that pins only the tag is not demanding anything about invoiceId.
+    expect(() =>
+      assertRouteTermsMatch(
+        { ...base, methodDetails: { destinationTag: 42, invoiceId: 'AB'.repeat(32) } },
+        { ...base, methodDetails: { destinationTag: 42 } },
+      ),
+    ).not.toThrow()
+  })
+
+  it('ignores methodDetails keys that are not enforcement terms', () => {
+    expect(() =>
+      assertRouteTermsMatch(
+        { ...base, methodDetails: { reference: 'a', network: 'testnet' } },
+        { ...base, methodDetails: { reference: 'b', network: 'testnet' } },
+      ),
+    ).not.toThrow()
+  })
+
+  it('still ignores everything when no route request is supplied', () => {
+    expect(() =>
+      assertRouteTermsMatch({ ...base, methodDetails: { destinationTag: 42 } }, undefined),
+    ).not.toThrow()
+  })
+})
