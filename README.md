@@ -647,7 +647,7 @@ await close({
 })
 ```
 
-**Server-side redeem:** The server stores the latest claim signature alongside the cumulative amount. If the client disappears without closing the channel, the server can call `close()` with its own seed to redeem accumulated funds on-chain. The server's `close()` call submits a `PaymentChannelClaim` without `tfClose` (only the channel source can close). To enable this, the server operator needs access to the recipient wallet seed.
+**Server-side redeem:** The server stores the latest claim signature alongside the cumulative amount. If the client disappears without closing the channel, the server can call `close()` with its own seed to redeem accumulated funds on-chain. The server's `close()` call submits a `PaymentChannelClaim` with `tfClose`, which the ledger accepts from the destination: it settles, deletes the channel and refunds the funder's unspent deposit in one transaction. To enable this, the server operator needs access to the recipient wallet seed.
 
 ### Streaming and sessions
 
@@ -1179,22 +1179,22 @@ Apache License 2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
 
 `xrpl-mpp-sdk` follows the [Machine Payments Protocol (MPP)](https://mpp.dev) to the letter for the handshake, the `Credential` / `Receipt` envelopes, single-use proof semantics, and the cumulative-voucher session model. The deviations below all trace to a single root: XRPL exposes a **native [PayChannel](https://xrpl.org/payment-channels.html) primitive**, not the programmable escrow contract the spec's `session` intent was written against (Tempo's `TempoStreamChannel`).
 
-### 1. Channel close: two transactions, not one
+### 1. Channel close: one transaction, with asymmetric timing
 
 The MPP [`session` intent](https://mpp.dev/payment-methods/tempo/session) describes settlement as a single, symmetric operation:
 
 > *"Either party can close the channel. The server calls `close()` on the escrow contract with the highest voucher, **settling the final balance on-chain and refunding any unused deposit** to the client."*
 
-So in the reference model one `close()` call, callable by either side, atomically (a) pays the server what it earned and (b) refunds the client's unused deposit. XRPL has no escrow contract to do this -- its native PayChannel splits "settle" and "refund" into two separate transactions, and restricts who may send each:
+XRPL's native PayChannel provides this in one transaction. A `PaymentChannelClaim` carrying `tfClose` settles the cumulative amount to the destination, deletes the channel entry, and returns the unspent deposit to the funder. The ledger accepts the flag from the **source and the destination** -- either party, as the spec describes.
 
-- `PaymentChannelClaim` **without** `tfClose` -- pays the cumulative amount to the **destination** (server). The server may submit this. It does **not** refund the deposit and does **not** delete the channel.
-- `PaymentChannelClaim` **with** `tfClose` -- only the channel **source** (funder/client) may set this flag. It starts the `SettleDelay`, after which the channel is deleted and the unspent deposit is returned to the funder.
+The difference is timing, not capability:
 
-There is no single transaction, available to the server, that both pays the server and refunds the client. The spec's atomic, either-party `close()` simply does not exist on this primitive.
+- Submitted by the **destination**, the close takes effect immediately.
+- Submitted by the **source**, it settles the claim and schedules deletion for once `SettleDelay` has elapsed. The delay exists to protect the destination, which keeps its window to redeem a claim it holds.
 
-**What the SDK does about it.** Because off-chain vouchers are worthless until someone posts a `PaymentChannelClaim` on-chain, a client that just walks away would leave the server holding signed claims and no money. To preserve the spec's guarantee ("the server can always recover what it earned"), the SDK adds server-side recovery the contract specs get for free:
+**What the SDK does.** Off-chain vouchers are worthless until someone posts a claim on-chain, so a client that walks away would leave the server holding signed claims and no money. The SDK closes from the server side:
 
-- **`closeFromStore()`** reads the highest cumulative voucher persisted for a channel and submits a `PaymentChannelClaim` (no `tfClose`) to pull those funds to the recipient. Idempotent -- no-ops if already finalized/redeemed.
+- **`closeFromStore()`** reads the highest cumulative voucher persisted for a channel and submits the claim with `tfClose`. Idempotent -- no-ops if already finalized or redeemed.
 - **Auto-close sweeper** (`autoClose`, on by default when a recipient `wallet` is provided) runs `closeFromStore` for any channel idle longer than `idleMs` (default 30s), then marks it finalized so later vouchers are rejected with `CHANNEL_EXPIRED`.
 
 ```ts
@@ -1206,10 +1206,9 @@ channel({
 })
 ```
 
-Two consequences, both following directly from the split above:
+One consequence remains: **the server needs the recipient wallet.** The spec's `close()` works from either side because the contract enforces correctness; here the server must actually sign an XRPL transaction.
 
-1. **The deposit refund is not automatic.** The server's claim leaves the channel object alive; the funder's unused deposit is only returned when the funder submits `tfClose` or a `CancelAfter` elapses. Set `cancelAfter` at channel creation so a channel cannot leak the funder's reserve indefinitely.
-2. **The server needs the recipient wallet.** The spec's `close()` works from either side because the contract enforces correctness; here the server must actually sign an XRPL transaction.
+`cancelAfter` at channel creation is still worth setting, but as a backstop for a server that never runs the sweep at all -- not as the only route by which the funder's deposit comes back.
 
 Implementation: `close`, `closeFromStore`, and the sweeper live in [`sdk/src/channel/server/Channel.ts`](sdk/src/channel/server/Channel.ts); a real usage example is in [`demo/llm-marketplace/channel/server.ts`](demo/llm-marketplace/channel/server.ts).
 
