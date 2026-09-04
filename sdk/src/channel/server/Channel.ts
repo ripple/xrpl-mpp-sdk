@@ -180,10 +180,10 @@ export function channel(parameters: channel.Parameters) {
 
   // Resolve auto-close: defaults to ON when a recipient wallet was provided.
   // The MPP spec (https://mpp.dev/payment-methods/tempo/session,
-  // /stellar/session) lets either party close the session. On XRPL the
-  // server-side "close" is a `PaymentChannelClaim` without `tfClose`
-  // followed by a `finalized` mark in the store -- this prevents further
-  // voucher acceptance, matching the spec's session-close semantics.
+  // /stellar/session) lets either party close the session, and so does the
+  // ledger: a `PaymentChannelClaim` with `tfClose` from the destination
+  // settles and deletes the channel in one transaction. The store is also
+  // marked `finalized`, which stops further vouchers without a ledger read.
   const recipientWallet =
     walletInput || walletSeed ? resolveWallet({ wallet: walletInput, seed: walletSeed }) : null
   const autoCloseConfig = resolveAutoCloseConfig(autoClose, recipientWallet !== null)
@@ -1179,12 +1179,11 @@ export declare namespace channel {
      * submits a `PaymentChannelClaim` for the latest cumulative voucher
      * and marks the channel finalized.
      *
-     * **XRPL caveat:** the destination cannot set `tfClose`. The claim
-     * recovers the server's earned amount and stops voucher acceptance,
-     * but the on-chain channel object remains until the funder closes
-     * it (with `tfClose`) or `CancelAfter` is reached. Set
-     * `cancelAfter` at channel creation as a defense-in-depth so the
-     * channel cannot leak indefinitely.
+     * The claim carries `tfClose`, which the ledger accepts from the
+     * destination as well as the source. Submitted by the destination it
+     * closes the channel immediately and returns the unspent deposit to
+     * the funder, so the sweep both collects what was earned and frees
+     * the funder's owner reserve in one transaction.
      */
     autoClose?: boolean | AutoCloseConfig
   }
@@ -1219,13 +1218,15 @@ export declare namespace channel {
 /**
  * Close a PayChannel on-chain.
  *
- * Behavior depends on who submits:
- * - **Source (funder)**: submits PaymentChannelClaim with tfClose + claim details.
- *   This initiates the settle delay, after which the channel can be deleted.
- * - **Destination (recipient)**: submits PaymentChannelClaim to redeem funds
- *   (without tfClose, since only the source can set tfClose on current XRPL).
+ * Both parties may close, and the ledger treats them differently:
+ * - **Destination (recipient)**: the claim settles and the channel is deleted
+ *   immediately, with any unspent deposit returned to the funder.
+ * - **Source (funder)**: the claim settles and closure is scheduled, taking
+ *   effect once `SettleDelay` has elapsed. The channel survives until then, so
+ *   the destination keeps its window to redeem.
  *
- * The function looks up the channel on-chain to detect the caller's role.
+ * The channel is looked up on-chain to establish the caller's role. Anyone who
+ * is neither party is rejected here rather than by the ledger.
  */
 export async function close(params: {
   /** Wallet of the closer (funder or recipient). Preferred over `seed`. */
@@ -1262,9 +1263,23 @@ export async function close(params: {
   try {
     const channelObj = await lookupChannel(client, channelId)
     const isSource = channelObj?.Account === wallet.address
+    const isDestination = channelObj?.Destination === wallet.address
 
-    // tfClose = 0x00010000. Only the source (funder) is allowed to set it.
-    const TF_CLOSE = 0x00010000
+    // The ledger accepts `tfClose` from the source and from the destination and
+    // from nobody else. Checking here turns a third party's attempt into a typed
+    // error instead of a raw tec after a round trip and a fee.
+    if (channelObj && !isSource && !isDestination) {
+      throw verificationFailed(
+        'CHANNEL_DESTINATION_MISMATCH',
+        `Channel ${channelId} is funded by ${channelObj.Account} and pays ` +
+          `${channelObj.Destination}. ${wallet.address} is neither, so it cannot close it.`,
+      )
+    }
+
+    // tfClose is 0x00020000. 0x00010000 is tfRenew, which clears the channel's
+    // Expiration -- the opposite of closing, and silently so: the claim still
+    // settles, so the transaction succeeds and the channel quietly survives.
+    const TF_CLOSE = 0x00020000
 
     const channelClaim = {
       TransactionType: 'PaymentChannelClaim' as const,
@@ -1275,7 +1290,7 @@ export async function close(params: {
       Signature: signature.toUpperCase(),
       PublicKey: channelPublicKey,
       SourceTag: MPP_SOURCE_TAG,
-      ...(isSource ? { Flags: TF_CLOSE } : {}),
+      Flags: TF_CLOSE,
     }
 
     const result = await client.submitAndWait(channelClaim, { wallet: wallet._xrplWallet })
@@ -1309,17 +1324,15 @@ export async function close(params: {
  * transaction to settle.
  *
  * **XRPL specifics** (vs. Tempo/Stellar smart-contract close):
- * - The destination of an XRPL `PayChannel` cannot set `tfClose`. This
- *   function therefore submits a `PaymentChannelClaim` *without* `tfClose`,
- *   which transfers the cumulative amount to the destination but leaves
- *   the channel object in the ledger.
- * - The session is nevertheless "closed" from the MPP perspective: the
- *   channel is marked `finalized` in the store, so any further voucher
- *   credential is rejected with `CHANNEL_EXPIRED`.
- * - To actually delete the channel and refund the unspent deposit to the
- *   funder, the funder must submit `tfClose` (which starts the
- *   `SettleDelay`) or `CancelAfter` must be reached. Setting
- *   `cancelAfter` at channel creation is recommended as defense-in-depth.
+ * - A single `PaymentChannelClaim` with `tfClose` does the whole job: the
+ *   cumulative amount moves to the destination, the channel entry is deleted,
+ *   and the unspent deposit returns to the funder. The ledger accepts the flag
+ *   from the destination, which closes immediately.
+ * - The channel is also marked `finalized` in the store, so any further voucher
+ *   credential is rejected with `CHANNEL_EXPIRED` without a ledger read.
+ * - `cancelAfter` at channel creation remains worth setting, but as a backstop
+ *   for a server that never runs this path at all, not as the only way the
+ *   funder's deposit comes back.
  *
  * Returns `null` (no on-chain submission) when there is nothing to claim:
  * the channel is already finalized, no voucher has been received, or the

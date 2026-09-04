@@ -369,9 +369,17 @@ async function runScenarioB(): Promise<ScenarioResult> {
         : 'no redeemed marker',
     },
     {
-      name: 'On-chain Balance == final cumulative',
-      pass: balanceAfter === finalCumulative,
-      detail: `got ${balanceAfter ?? 'null'}, expected ${finalCumulative}`,
+      // The sweep claims with tfClose, which the ledger accepts from the
+      // destination and applies immediately: the entry is settled, deleted,
+      // and the unspent deposit returns to the funder. A vanished entry is
+      // therefore the proof of a completed close, where a readable Balance
+      // would mean the channel was still sitting there.
+      name: 'Channel entry deleted on-chain',
+      pass: balanceAfter === null,
+      detail:
+        balanceAfter === null
+          ? `entry gone (settled ${finalCumulative} drops, deposit refunded)`
+          : `entry still present with Balance ${balanceAfter}`,
     },
   ]
 
@@ -700,9 +708,14 @@ async function runScenarioC(): Promise<ScenarioResult> {
         : 'no redeemed marker',
     },
     {
-      name: 'On-chain Balance == cumulative committed via voucher',
-      pass: balanceAfter === expectedCumulative,
-      detail: `got ${balanceAfter ?? 'null'}, expected ${expectedCumulative}`,
+      // Same reasoning as scenario B: the sweep closes with tfClose, so the
+      // entry is deleted rather than left carrying a Balance.
+      name: 'Channel entry deleted on-chain',
+      pass: balanceAfter === null,
+      detail:
+        balanceAfter === null
+          ? `entry gone (settled ${expectedCumulative} drops, deposit refunded)`
+          : `entry still present with Balance ${balanceAfter}`,
     },
   ]
 
