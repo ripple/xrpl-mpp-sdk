@@ -17,22 +17,48 @@
  *
  * Run: npx tsx demo/escrow-lifecycle.ts
  */
+import { Client } from 'xrpl'
+import { XRPL_RPC_URLS } from '../sdk/src/constants.js'
 import { generatePreimageCondition } from '../sdk/src/utils/escrow.js'
+import { readValidatedCloseTimeMs } from '../sdk/src/utils/ledger-time.js'
 import { Wallet } from '../sdk/src/utils/wallet.js'
 import * as log from './log.js'
 
 const NETWORK = 'testnet' as const
 
-/** Margin added to every cutoff so we don't race the local-clock vs ledger-time skew. */
-const SAFETY_MARGIN_MS = 2_000
+/** Give up rather than poll forever if the node stops advancing. */
+const LEDGER_WAIT_TIMEOUT_MS = 120_000
 
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+/**
+ * Wait until the latest validated ledger has closed past `target`.
+ *
+ * Escrow cutoffs are judged against that close time, not the local clock, and it
+ * lags wall clock by a ledger or two. Sleeping until the wall clock passes the
+ * cutoff plus a fixed margin only narrows the race -- the ledger decides when it
+ * closes, so this polls the value `finishEscrow` and `cancelEscrow` themselves
+ * check.
+ */
 async function waitUntil(target: Date): Promise<void> {
-  const remaining = target.getTime() - Date.now()
-  if (remaining > 0) await sleep(remaining + SAFETY_MARGIN_MS)
+  const local = target.getTime() - Date.now()
+  if (local > 0) await sleep(local)
+
+  const client = new Client(XRPL_RPC_URLS[NETWORK])
+  await client.connect()
+  try {
+    const deadline = Date.now() + LEDGER_WAIT_TIMEOUT_MS
+    while ((await readValidatedCloseTimeMs(client)) <= target.getTime()) {
+      if (Date.now() > deadline) {
+        throw new Error(`validated ledger did not reach ${target.toISOString()} in time`)
+      }
+      await sleep(1_000)
+    }
+  } finally {
+    await client.disconnect()
+  }
 }
 
 async function timeLockedScenario(): Promise<void> {
