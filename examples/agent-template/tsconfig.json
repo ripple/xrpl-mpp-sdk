@@ -17,7 +17,6 @@
     // this folder. If you copy this folder out of the repo to use it as a
     // starter, DELETE the `baseUrl` and `paths` keys and add `xrpl-mpp-sdk`
     // as a normal dependency in package.json.
-    "baseUrl": ".",
     "paths": {
       "xrpl-mpp-sdk": ["../../sdk/src/index.ts"],
       "xrpl-mpp-sdk/server": ["../../sdk/src/server/index.ts"],
