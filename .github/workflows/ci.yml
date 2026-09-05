@@ -72,7 +72,7 @@ jobs:
       matrix:
         include:
           - { mppx: '0.8.0', xrpl: '4.0.0', label: lowest supported }
-          - { mppx: '0.8.5', xrpl: '4.6.0', label: highest tested }
+          - { mppx: '0.9.2', xrpl: '4.6.0', label: highest tested }
     # Named for the corner it covers, not the versions in it: a check name that
     # carries version numbers changes on every bump, which silently invalidates
     # any branch-protection rule requiring it. The versions stay visible in the
