@@ -12,10 +12,10 @@
     "check:types": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.98.1",
+    "@anthropic-ai/sdk": "^0.122.0",
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
-    "mppx": "^0.8.17",
+    "mppx": "^0.9.2",
     "xrpl": "^4.6.0",
     "xrpl-mpp-sdk": "file:../..",
     "zod": "^4.4.3"
@@ -25,6 +25,6 @@
     "@types/node": "^25.9.5",
     "tsx": "^4.23.12",
     "typescript": "^5.9.3",
-    "viem": "^2.55.17"
+    "viem": "^2.56.1"
   }
 }

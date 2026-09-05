@@ -1,0 +1,4 @@
+# Same reason as the root: pnpm 11 does not read overrides from
+# package.json.
+overrides:
+  qs: '>=6.16.0'

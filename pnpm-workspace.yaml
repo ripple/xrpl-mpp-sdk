@@ -1,0 +1,6 @@
+# Overrides live here rather than in package.json: pnpm 11 stopped reading
+# them from package.json, and would have dropped both of these silently on
+# the next `packageManager` bump. This file is read by pnpm 10 and 11 alike.
+overrides:
+  esbuild: '>=0.28.1 <0.29.0'
+  qs: '>=6.16.0'
