@@ -954,6 +954,15 @@ Additional SDK-level error codes (raised before submit, no tecResult):
 - `MPT_NOT_AUTHORIZED` (issuer side) -- raised after holder-side authorization when the issuance has `lsfMPTRequireAuth` and the issuer must run a paired MPTokenAuthorize
 - `DESTINATION_PERMISSION_DENIED` -- VerificationFailedError, the ledger returned `tecNO_PERMISSION` on a payment that did not move an MPT. The usual cause is deposit authorization (`lsfDepositAuth`) on the recipient, which accepts funds only from preauthorized senders. That is a setting on the recipient account, not a fault in the payment, so it is reported separately from the MPT case rather than folded into it
 
+Raised by the wallet and token helpers, outside the payment path:
+- `MPT_ISSUANCE_NOT_FOUND` -- the `mpt_issuance_id` does not resolve to an `MPTokenIssuance` on the ledger
+- `MPT_NOT_ISSUER` -- an issuer-only operation (`issue`, `authorize`, issuer-side `MPTokenAuthorize`) was attempted by an account that did not create the issuance
+- `MPT_HAS_BALANCE` -- `refuseToken` on an MPToken that still holds a balance; the ledger will not delete it until the balance is returned
+- `MPT_INVALID_METADATA` -- `createToken` metadata exceeds the ledger's limit
+- `TRUSTLINE_HAS_BALANCE` -- removing a trustline that still holds a balance, which the ledger refuses for the same reason
+- `ESCROW_FAILED` -- an escrow transaction was submitted and did not succeed, with the raw result carried as context
+- `CHALLENGE_REJECTED` -- the client refused a challenge before signing, for example one naming a network it was pinned away from
+
 Channel-specific:
 - `INVALID_SIGNATURE` -- InvalidSignatureError, claim signature does not verify against the channel's on-ledger `PublicKey`
 - `REPLAY_DETECTED` -- VerificationFailedError, same cumulative resubmitted or challenge id reused
