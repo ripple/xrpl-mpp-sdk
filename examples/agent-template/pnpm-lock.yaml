@@ -297,7 +297,7 @@ packages:
     engines: {node: '>=18.0.0'}
 
   '@xrplf/secret-numbers@2.0.0':
-    resolution: {integrity: sha512-z3AOibRTE9E8MbjgzxqMpG1RNaBhQ1jnfhNCa1cGf2reZUJzPMYs4TggQTc7j8+0WyV3cr7y/U8Oz99SXIkN5Q==, tarball: https://artifactory.ops.ripple.com/artifactory/api/npm/ripple-npm/@xrplf/secret-numbers/-/@xrplf/secret-numbers-2.0.0.tgz}
+    resolution: {integrity: sha512-z3AOibRTE9E8MbjgzxqMpG1RNaBhQ1jnfhNCa1cGf2reZUJzPMYs4TggQTc7j8+0WyV3cr7y/U8Oz99SXIkN5Q==}
 
   abitype@1.2.3:
     resolution: {integrity: sha512-Ofer5QUnuUdTFsBRwARMoWKOH1ND5ehwYhJ3OJ/BQO+StkwQjHw0XyVh4vDttzHB7QOFhPHa/o413PJ82gU/Tg==}
