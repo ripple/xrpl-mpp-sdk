@@ -269,6 +269,13 @@ export function channel(parameters: channel.Parameters) {
         ...request,
         methodDetails: {
           ...request.methodDetails,
+          // The nonce that makes this challenge distinct. A challenge id is an
+          // HMAC over the challenge's own fields with nothing random in it, so
+          // two challenges with identical content share an id -- and the id is
+          // the single-use replay key, so the second payment would be refused
+          // as already answered. `expires` varies too and hides this in
+          // ordinary use; test/security/challenge-uniqueness.test.ts freezes
+          // the clock so it cannot.
           reference: crypto.randomUUID(),
           network,
           cumulativeAmount,
