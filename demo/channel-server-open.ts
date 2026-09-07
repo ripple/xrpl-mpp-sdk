@@ -89,9 +89,8 @@ async function main() {
   // ── Phase 3: Server setup ─────────────────────────────────────────────────
   const store = Store.memory()
 
-  // Server knows the client's publicKey upfront (shared out-of-band).
   // channelId is unknown until the open tx lands -- handlers are created dynamically.
-  const channelMethod = serverChannel({ publicKey: payer.publicKey, network: NETWORK, store })
+  const channelMethod = serverChannel({ network: NETWORK, store })
   const mppx = Mppx.create({ secretKey: demoSecretKey(), methods: [channelMethod] })
 
   // Open handler: amount '0' because the client makes no initial value claim

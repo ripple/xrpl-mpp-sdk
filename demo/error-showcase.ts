@@ -457,7 +457,6 @@ async function main() {
 
     const store = Store.memory()
     const srvMethod = serverChannel({
-      publicKey: channelFunder.publicKey,
       recipient: channelReceiver.address,
       network: NETWORK,
       store,
@@ -526,7 +525,6 @@ async function main() {
 
     const store = Store.memory()
     const srvMethod = serverChannel({
-      publicKey: channelFunder.publicKey,
       recipient: channelReceiver.address,
       network: NETWORK,
       store,
@@ -602,7 +600,6 @@ async function main() {
     // Use one store for the fail attempt
     const failStore = Store.memory()
     const failMethod = serverChannel({
-      publicKey: channelFunder.publicKey,
       recipient: channelReceiver.address,
       network: NETWORK,
       store: failStore,
@@ -642,7 +639,6 @@ async function main() {
     log.fix('Claiming correct amount (500,000 drops = 0.5 XRP)...')
     const retryStore = Store.memory()
     const retryMethod = serverChannel({
-      publicKey: channelFunder.publicKey,
       recipient: channelReceiver.address,
       network: NETWORK,
       store: retryStore,
@@ -696,7 +692,6 @@ async function main() {
 
     const store = Store.memory()
     const srvMethod = serverChannel({
-      publicKey: channelFunder.publicKey,
       recipient: channelReceiver.address,
       network: NETWORK,
       store,
@@ -774,7 +769,6 @@ async function main() {
 
     const store = Store.memory()
     const srvMethod = serverChannel({
-      publicKey: channelFunder.publicKey,
       recipient: channelReceiver.address,
       network: NETWORK,
       store,

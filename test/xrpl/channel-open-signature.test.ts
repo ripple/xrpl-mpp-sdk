@@ -140,15 +140,12 @@ describe('channel open -- placeholder signature handling', () => {
 
     const store = Store.memory()
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
       // doVerifyOpen does not consult channelLookup, so this test exercises
       // the post-broadcast validation path directly via the vi.mock'd Client.
-      verifyChannelOnChain: false,
-      allowUnverifiedChannels: true,
     })
 
     const { challenge, cred } = buildOpenCredential({
@@ -174,13 +171,10 @@ describe('channel open -- placeholder signature handling', () => {
 
     const store = Store.memory()
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: false,
-      allowUnverifiedChannels: true,
     })
 
     const { challenge, cred } = buildOpenCredential({
@@ -205,13 +199,10 @@ describe('channel open -- placeholder signature handling', () => {
 
     const store = Store.memory()
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: false,
-      allowUnverifiedChannels: true,
     })
 
     const { challenge, cred } = buildOpenCredential({
@@ -240,13 +231,10 @@ describe('channel open -- placeholder signature handling', () => {
 
     const store = Store.memory()
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: false,
-      allowUnverifiedChannels: true,
     })
 
     // Cap is current (1000) + ceil(60_000 / 4_000) = 1015, plus 4 ledgers
@@ -272,13 +260,10 @@ describe('channel open -- placeholder signature handling', () => {
 
     const store = Store.memory()
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: false,
-      allowUnverifiedChannels: true,
     })
 
     const expires = new Date(Date.now() - 1_000).toISOString()
@@ -303,13 +288,10 @@ describe('channel open -- placeholder signature handling', () => {
 
     const store = Store.memory()
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: false,
-      allowUnverifiedChannels: true,
     })
 
     // Mock returns ledger_current_index = 1000. With expires 5 min from now,

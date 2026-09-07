@@ -32,6 +32,7 @@ export function channel(parameters: channel.Parameters) {
   const {
     wallet: walletInput,
     seed,
+    channelId: defaultChannelId,
     network: defaultNetwork = 'testnet',
     rpcUrl: _defaultRpcUrl,
   } = parameters
@@ -42,17 +43,46 @@ export function channel(parameters: channel.Parameters) {
 
   const wallet = resolveWallet({ wallet: walletInput, seed })
 
+  /**
+   * Highest cumulative this instance has signed, per channel.
+   *
+   * The challenge reports where to resume, but it can only do so for a channel
+   * it names: a server serving callers it cannot know in advance advertises
+   * none, and then reports zero every time. A client trusting that alone
+   * re-signs the same cumulative on every request, and the second one is
+   * refused as a replay -- correctly, since a cumulative must strictly
+   * increase.
+   *
+   * So the client remembers what it signed and resumes from whichever is
+   * higher. Process-local, which is the right scope: it is a floor, not a
+   * ledger, and the server's high-water mark remains the authority. A restart
+   * falls back to what the challenge reports.
+   */
+  const signedCumulative = new Map<string, bigint>()
+
   return Method.toClient(ChannelMethod, {
     context: z.object({
       cumulativeAmount: z.optional(z.string()),
       action: z.optional(z.enum(['voucher', 'close', 'open'])),
+      /**
+       * Channel to pay through, when the challenge names none. A server that
+       * accepts channels from callers it has not met has no channel to
+       * advertise, so the caller supplies its own.
+       */
+      channelId: z.optional(z.string()),
       /** Signed PaymentChannelCreate tx blob -- required for action: 'open'. */
       openTransaction: z.optional(z.string()),
     }),
     async createCredential({ challenge, context }) {
       const { request } = challenge
-      const { amount, channelId } = request
+      const { amount } = request
       const network = (request.methodDetails?.network as string) ?? defaultNetwork
+
+      // The challenge wins when it names a channel: that is the server stating
+      // which one it is charging through. It names none when it serves callers
+      // it cannot know in advance, and then the channel is ours to supply --
+      // per request through `context`, or once through the method config.
+      const channelId = request.channelId || context?.channelId || defaultChannelId || ''
 
       const action = context?.action ?? 'voucher'
 
@@ -85,7 +115,10 @@ export function channel(parameters: channel.Parameters) {
         })
       }
 
-      const previousCumulative = BigInt(request.methodDetails?.cumulativeAmount ?? '0')
+      const reportedCumulative = BigInt(request.methodDetails?.cumulativeAmount ?? '0')
+      const ourCumulative = signedCumulative.get(channelId) ?? 0n
+      const previousCumulative =
+        reportedCumulative > ourCumulative ? reportedCumulative : ourCumulative
       const cumulativeAmount =
         context?.cumulativeAmount !== undefined
           ? BigInt(context.cumulativeAmount)
@@ -94,8 +127,17 @@ export function channel(parameters: channel.Parameters) {
       const cumulativeStr = cumulativeAmount.toString()
 
       // signPaymentChannelClaim expects XRP, not drops -- it internally calls xrpToDrops.
+      if (!channelId) {
+        throw new Error(
+          '[xrpl-mpp-sdk] no channelId: the challenge names none, and none was supplied. Pass ' +
+            '`channelId` to xrpl.channel() after opening the channel, or per request in the ' +
+            'method context.',
+        )
+      }
+
       const cumulativeXrp = dropsToXrpString(cumulativeStr)
       const signature = signPaymentChannelClaim(channelId, cumulativeXrp, wallet.privateKey)
+      if (cumulativeAmount > ourCumulative) signedCumulative.set(channelId, cumulativeAmount)
 
       return Credential.serialize({
         challenge,

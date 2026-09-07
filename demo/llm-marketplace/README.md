@@ -464,11 +464,12 @@ npx tsx demo/llm-marketplace/channel/client.ts
 ### What happens
 
 1. Server funds a recipient wallet on testnet, exposes
-   `GET /info`, `POST /register`, `GET /open`, `POST /complete`,
+   `GET /info`, `GET /open`, `POST /complete`,
    `GET /summary`. `/info` is an identity probe -- it carries the
    marketplace address + model but **no per-token rates**.
 2. Client funds a payer wallet, hits `GET /info` (address + model only,
-   no price), then `POST /register` to share its channel publicKey.
+   no price). No registration step: the server needs nothing from the client
+   to verify claims.
    The 5 XRP funding amount is the client's own risk budget for the run.
 3. Client pre-signs a `PaymentChannelCreate` (5 XRP) **without
    submitting**. `GET /open` triggers a 402; `mppx` ships the signed
@@ -519,7 +520,7 @@ npx tsx demo/llm-marketplace/channel-fund/client.ts
 
 ### What changes vs `channel/`
 
-The wire protocol is identical -- same `/info`, `/register`, `/open`,
+The wire protocol is identical -- same `/info`, `/open`,
 `/complete`. The only differences are:
 
 - The **client opens with `5000` drops** (not 5 000 000). That covers the

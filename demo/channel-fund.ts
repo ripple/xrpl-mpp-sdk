@@ -104,7 +104,6 @@ async function main() {
   // ── Server side: configure verify with a shared store ────────────
   const store = Store.memory()
   const channelMethod = serverChannel({
-    publicKey: funder.publicKey,
     recipient: recipient.address,
     network: NETWORK,
     store,

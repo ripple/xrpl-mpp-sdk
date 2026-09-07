@@ -279,12 +279,23 @@ const data = await response.json()
 Same two call sites as charge: the **method instance** at startup, and the
 **per-request invocation** at the 402 point.
 
-The method instance needs the funder's `publicKey`, and the per-request call
-needs the `channelId`. Neither is something the server invents -- both come from
-the client, which opens the channel on-chain and then tells the server about it.
-How that arrives is up to you: the demos use a small `POST /setup` endpoint
-(`demo/channel-server.ts`), and the `open` action lets it flow through the 402
-itself (`demo/channel-server-open.ts`), with no side channel at all.
+Neither the funder's key nor the channel has to be configured, and a server
+serving callers it has not met cannot configure either: a client picks its
+channel key and receives its channel id from its own `PaymentChannelCreate`.
+So there is nothing to configure: pass `channelId: ''` and register the method.
+Claims verify against the key each channel names on the ledger, every
+credential names the channel it pays through, and one server serves any number
+of unrelated funders. That is what `demo/channel-server.ts` does.
+
+The client side fills both gaps, since it has the facts: pass `channelId` to
+`xrpl.channel()` once the channel is open, or per request in the method
+context. It also tracks the cumulative it has signed per channel, so a
+challenge that names no channel -- and therefore reports no mark to resume
+from -- does not stall it after the first request.
+
+Set a `channelId` only when the server decides which channel a route bills.
+The `open` action lets a channel be established through the 402 itself
+(`demo/channel-server-open.ts`), with no side channel at all.
 
 ```ts
 import { Mppx, Store } from 'mppx/server'
@@ -295,7 +306,6 @@ const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
   methods: [
     channel({
-      publicKey: 'ED...',      // channel funder's public key, from the client
       recipient: 'rYourAddress...', // the address the channel must pay
       network: 'testnet',
       store: Store.memory(),   // tracks cumulative amounts (development only)
@@ -312,7 +322,10 @@ const mppx = Mppx.create({
 export async function handler(request: Request) {
   const result = await mppx['xrpl/session']({
     amount: '100000',
-    channelId: 'ABCD...',    // 64 hex, from the opened channel
+    // '' advertises no channel, which is what a server serving callers it has
+    // not met has to do: each credential names the channel it pays through.
+    // Set a channel id only when this route bills one you already know.
+    channelId: '',
     recipient: 'rYourAddress...',
   })(request)
 
@@ -330,7 +343,10 @@ import { channel } from 'xrpl-mpp-sdk/channel/client'
 
 const mppx = Mppx.create({
   methods: [
-    channel({ seed: 'sEdV...', network: 'testnet' }),
+    // `channelId` is what we opened. Pass it when the server advertises no
+    // channel of its own, which is the case for a server serving callers it
+    // cannot know in advance.
+    channel({ seed: 'sEdV...', channelId, network: 'testnet' }),
   ],
   // See "Challenge-safe fetch" below. Required on mppx 0.8.x.
   fetch: challengeSafeFetch(),
@@ -461,7 +477,6 @@ charge({
 
 ```ts
 channel({
-  publicKey: string,                // funder key: allowlist + fallback verification key
   recipient?: string,               // address the channel must pay (defaults to wallet/seed address)
   network?: 'mainnet' | 'testnet' | 'devnet',
   rpcUrl?: string,
@@ -469,8 +484,6 @@ channel({
   requireStore?: boolean,           // require store (default: true)
   storeDurability?: 'shared' | 'process-local',  // required in production
   allowInsecureTransport?: boolean, // permit a non-wss rpcUrl (default: false)
-  verifyChannelOnChain?: boolean,   // verify channel parties, expiration, balance on-chain (default: true)
-  allowUnverifiedChannels?: boolean, // acknowledge verifyChannelOnChain: false (default: false)
   minSettleDelay?: number,          // minimum on-chain SettleDelay in seconds (default: 3600)
   settlementMarginMs?: number,      // refuse vouchers this close to closing (default: 60_000)
   onVoucherAccepted?: (state) => void, // remaining redeemable value + close time per voucher
@@ -481,13 +494,13 @@ channel({
 })
 ```
 
-When `verifyChannelOnChain` is on (the default), the first voucher per channel costs one `ledger_entry` RPC; subsequent vouchers reuse the cached entry until `channelMetadataTtlMs` elapses or the cumulative exceeds the cached `Amount` (force-refresh detects a `PaymentChannelFund` top-up). Without it, the server accepts any cryptographically-valid claim for any channelId, including fabricated ones.
+The channel is always read from the ledger, because it is the ledger that names the key each claim verifies against. The first voucher per channel costs one `ledger_entry` RPC; subsequent vouchers reuse the cached entry until `channelMetadataTtlMs` elapses or the cumulative exceeds the cached `Amount` (force-refresh detects a `PaymentChannelFund` top-up). Supply `channelLookup` to read the channel from your own infrastructure, which is also how the tests inject one.
 
 **The channel is verified against ledger state, not configuration.** Before any claim is honoured:
 
 - **`Destination` must equal `recipient`.** Otherwise the channel pays someone else and its claims can never be redeemed here. Mismatches surface as `CHANNEL_DESTINATION_MISMATCH`. This is the difference between a valid-looking voucher and a collectable one: without the check, a funder can open a channel to their own address, sign perfectly valid cumulative claims, receive service indefinitely, and reclaim every drop once `SettleDelay` elapses.
-- **Claims verify against the channel's on-ledger `PublicKey`**, not the configured one. The configured `publicKey` acts as an allowlist and as a fallback when a custom `channelLookup` omits the field. Because the key comes from the ledger, multi-funder deployments work without reconfiguration.
-- **`Account` must derive from that public key**, so the funder identity is internally consistent.
+- **Claims verify against the channel's on-ledger `PublicKey`.** There is no configured key: a client's channel key is chosen in its own `PaymentChannelCreate`, so a server accepting callers it has not met could never know it. A `channelLookup` that omits the field is an error rather than a fallback, since nothing else names a key.
+- **The credential's sender must equal the channel's `Account`.** Not an address derived from the channel key: the protocol lets a channel name any key, and a funder is encouraged to dedicate a key pair to it, so those two addresses legitimately differ.
 
 `recipient` defaults to the address of `wallet` / `seed` when either is supplied, and passing both with different addresses is rejected at construction. Supplying none of the three skips the destination check and emits a warning.
 
@@ -496,7 +509,6 @@ When `verifyChannelOnChain` is on (the default), the first voucher per channel c
 - **`SettleDelay` must be at least `minSettleDelay`** (default 1 hour). That is the window in which the recipient can still redeem after the funder initiates close; below it, the funder could reclaim unredeemed value faster than this server notices and submits a claim. Rejected with `CHANNEL_SETTLE_DELAY_TOO_SHORT`.
 - **A closing channel is refused, not merely flagged.** Once the channel is within `settlementMarginMs` of `Expiration` or `CancelAfter`, vouchers are rejected with `CHANNEL_CLOSING`, because redemption needs a `PaymentChannelClaim` submitted and validated. `CancelAfter` used to be advisory: it fired a callback and the voucher was still honoured.
 - **The metadata cache cannot outlive the deadline.** The effective TTL shrinks to a third of the remaining window, so the last look before a close is always fresh without paying for a lookup per voucher.
-- **`verifyChannelOnChain: false` is gated.** It disables the destination, funder, expiry, settle-delay and funding checks at once, leaving only the claim signature, so it now requires `allowUnverifiedChannels: true` and warns at runtime.
 - **`onVoucherAccepted` reports exposure** after each accepted voucher: funded amount, remaining redeemable drops, and close time. Use it to bound how much unsettled value you serve against one channel. It is a callback rather than receipt metadata because mppx's `Receipt` shape is fixed.
 
 ### Client options (channel)
@@ -751,7 +763,7 @@ Read **[Production deployment](#production-deployment)** before running this wit
 The server also binds every credential to its issuer DID. The credential's `source` field is parsed as `did:pkh:xrpl:{network}:{address}` and the embedded address is matched against:
 
 - For charge: `tx.Account` on the submitted Payment.
-- For channel voucher/close: the address derived from the configured `publicKey`.
+- For channel voucher/close: the channel's on-ledger `Account`.
 - For channel open: `decoded.Account` on the PaymentChannelCreate.
 
 This closes hash-theft (push mode) and third-party-blob replay (pull mode) -- an attacker cannot wrap a third party's tx hash or signed blob in their own credential and claim credit. Mismatches surface as `SOURCE_MISMATCH`.
@@ -1210,7 +1222,6 @@ The difference is timing, not capability:
 
 ```ts
 channel({
-  publicKey,
   store,
   wallet,          // recipient wallet -- required to sign the on-chain claim
   autoClose: { idleMs: 30_000 },
@@ -1225,4 +1236,4 @@ Implementation: `close`, `closeFromStore`, and the sweeper live in [`sdk/src/cha
 
 ### 2. Voucher verification is not strictly off-chain
 
-The same "native primitive, no escrow contract" root produces one more deviation. The spec's `session` intent promises that the server verifies each voucher with *"fast signature checks -- no RPC or blockchain calls"*: with a smart-contract escrow, a valid signature is sufficient proof, because the contract guarantees the channel exists and is funded. XRPL has no such contract, so a cryptographically valid claim alone says nothing about whether the `channelId` is real or solvent. By default (`verifyChannelOnChain: true`) the SDK therefore pairs the local signature check with an on-chain `ledger_entry` lookup that confirms the channel exists, has not expired, and is funded above the claimed cumulative. The lookup is cached per channel (`channelMetadataTtlMs`, defaulting to half of `settlementMarginMs` so a stale read can never consume the whole margin), so in practice it costs roughly one RPC on the first voucher and signature-only checks thereafter -- but it is still a departure from the spec's strictly off-chain critical path. `verifyChannelOnChain: false` recovers the spec's behaviour, and throws unless paired with `allowUnverifiedChannels: true`: without the lookup, a cryptographically valid claim for any channelId, including a fabricated one, is accepted.
+The same "native primitive, no escrow contract" root produces one more deviation. The spec's `session` intent promises that the server verifies each voucher with *"fast signature checks -- no RPC or blockchain calls"*: with a smart-contract escrow, a valid signature is sufficient proof, because the contract guarantees the channel exists and is funded. XRPL has no such contract, so a cryptographically valid claim alone says nothing about whether the `channelId` is real or solvent. The SDK therefore pairs the signature check with an on-chain `ledger_entry` lookup that confirms the channel exists, has not expired, and is funded above the claimed cumulative. The lookup is cached per channel (`channelMetadataTtlMs`, defaulting to half of `settlementMarginMs` so a stale read can never consume the whole margin), so in practice it costs roughly one RPC on the first voucher and cached checks thereafter -- but it is still a departure from the spec's strictly off-chain critical path. There is no way to switch it off: the ledger is also where the key each claim verifies against comes from, so skipping it would leave nothing to verify.

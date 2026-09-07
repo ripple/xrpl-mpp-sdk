@@ -285,12 +285,10 @@ describe('replay key retention', () => {
       const store = observableStore()
       const fabricated = 'F'.repeat(64)
       const method = serverChannel({
-        publicKey: funder.publicKey,
         recipient: recipient.address,
         network: NETWORK,
         store: store as never,
         storeDurability: 'process-local',
-        verifyChannelOnChain: true,
         channelLookup: vi.fn(async () => null),
       })
       const v = voucher(fabricated, '100000')
@@ -317,12 +315,10 @@ describe('replay key retention', () => {
         CancelAfter: null,
       }
       const method = serverChannel({
-        publicKey: funder.publicKey,
         recipient: recipient.address,
         network: NETWORK,
         store: store as never,
         storeDurability: 'process-local',
-        verifyChannelOnChain: true,
         channelLookup: vi.fn(async () => entry),
       })
 

@@ -44,11 +44,9 @@ describe('integration: PayChannel lifecycle on devnet', () => {
 
     const store = Store.memory()
     const method = serverChannel({
-      publicKey: funder.publicKey,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
     })
 
     let prev = '0'
@@ -93,5 +91,87 @@ describe('integration: PayChannel lifecycle on devnet', () => {
       store,
     })
     expect(closeTx).toMatch(/^[0-9A-F]{64}$/)
+  }, 360_000)
+  /**
+   * The point of not configuring `publicKey`: one server, several funders it
+   * had never heard of, and one of them signing with a key pair dedicated to
+   * the channel rather than with its account key. Both are ordinary on the
+   * ledger and both used to be refused.
+   */
+  it('accepts channels from two unrelated funders with no key configured', async () => {
+    const [second, channelKey] = await Promise.all([createFundedWallet(), createFundedWallet()])
+
+    const [first, dedicated] = await Promise.all([
+      openChannel({
+        wallet: funder,
+        destination: receiver.address,
+        amount: '3000000',
+        settleDelay: 3600,
+        network: NETWORK,
+      }),
+      // Funded by `second`, but the channel names a different key, which is
+      // what the ledger documentation recommends.
+      openChannel({
+        wallet: second,
+        destination: receiver.address,
+        amount: '3000000',
+        settleDelay: 3600,
+        publicKey: channelKey.publicKey,
+        network: NETWORK,
+      }),
+    ])
+
+    const method = serverChannel({
+      // No publicKey: the key comes from each channel's on-ledger PublicKey.
+      recipient: receiver.address,
+      network: NETWORK,
+      store: Store.memory(),
+      storeDurability: 'process-local',
+    })
+
+    async function payOnce(params: {
+      channelId: string
+      signer: Wallet
+      sender: Wallet
+      cumulative: string
+    }) {
+      const { channelId, signer, sender, cumulative } = params
+      const signature = signer.signChannelClaim(channelId, cumulative)
+      const challenge = {
+        id: `int-multi-${channelId.slice(0, 8)}-${Date.now()}`,
+        realm: 'integration-test',
+        method: 'xrpl' as const,
+        intent: 'channel' as const,
+        expires: new Date(Date.now() + 300_000).toISOString(),
+        request: {
+          amount: cumulative,
+          channelId,
+          recipient: receiver.address,
+          methodDetails: { network: NETWORK, cumulativeAmount: '0' },
+        },
+      }
+      const cred = Credential.from({
+        challenge: challenge as any,
+        payload: { action: 'voucher', channelId, amount: cumulative, signature },
+        source: devnetSource(sender),
+      })
+      return await method.verify({ credential: cred as any, request: challenge.request })
+    }
+
+    const one = await payOnce({
+      channelId: first.channelId,
+      signer: funder,
+      sender: funder,
+      cumulative: '120000',
+    })
+    expect(one.status).toBe('success')
+
+    const two = await payOnce({
+      channelId: dedicated.channelId,
+      signer: channelKey,
+      sender: second,
+      cumulative: '340000',
+    })
+    expect(two.status).toBe('success')
   }, 360_000)
 })

@@ -2,18 +2,17 @@
  * LLM Marketplace -- PayChannel mode -- Client
  *
  * Counterpart of channel/server.ts. End-to-end flow:
- *   1. POST /register          -- share our channel publicKey
- *   2. GET  /open              -- mppx auto-handles the 402: signs a
+ *   1. GET  /open              -- mppx auto-handles the 402: signs a
  *                                 PaymentChannelCreate blob (5 XRP) and
  *                                 ships it inside the credential. The server
  *                                 submits, returns the channelId via the
  *                                 Payment-Receipt header.
- *   3. POST /complete (× 3)    -- for each prompt, mppx auto-handles the 402:
+ *   2. POST /complete (× 3)    -- for each prompt, mppx auto-handles the 402:
  *                                 reads cumulativeAmount from the challenge,
  *                                 signs a new voucher for `prev + worstQuote`,
  *                                 server verifies off-chain (no tx) and SSE-
  *                                 streams Anthropic tokens back live.
- *   4. close(...)              -- one on-chain PaymentChannelClaim tfClose
+ *   3. close(...)              -- one on-chain PaymentChannelClaim tfClose
  *                                 with the latest voucher to redeem and
  *                                 finalise the channel.
  *
@@ -203,20 +202,6 @@ async function main() {
   log.info('Per-call price: not advertised here -- will arrive in each /complete 402')
   log.separator()
 
-  // Tell the server which key to verify claim signatures against. Without
-  // this, the server cannot construct its xrpl/channel verifier and /open
-  // returns 503.
-  log.loading('POST /register -- sharing publicKey with marketplace...')
-  const regRes = await rawFetch(`${BASE}/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ publicKey: wallet.publicKey }),
-  })
-  if (!regRes.ok) {
-    log.error(`Register failed: ${regRes.status} ${await regRes.text()}`)
-    process.exit(1)
-  }
-  log.success('Marketplace armed -- ready to open the channel via MPP')
   log.separator()
 
   // Pre-sign the PaymentChannelCreate blob locally. The server will be the

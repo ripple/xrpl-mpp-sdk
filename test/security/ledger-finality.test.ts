@@ -182,7 +182,6 @@ describe('transport security', () => {
     const funder = Wallet.generate()
     expect(() =>
       serverChannel({
-        publicKey: funder.publicKey,
         recipient: funder.address,
         network: 'testnet',
         rpcUrl: 'ws://remote-node.example:51233',
