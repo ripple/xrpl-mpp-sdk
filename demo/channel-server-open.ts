@@ -27,6 +27,7 @@ import { Mppx, Store } from 'mppx/server'
 import { channel as clientChannel } from '../sdk/src/channel/client/Channel.js'
 import { close, channel as serverChannel } from '../sdk/src/channel/server/Channel.js'
 import { bufferChallengeResponses } from '../sdk/src/client/fetch.js'
+import type { XrplReceiptFields } from '../sdk/src/types.js'
 import { storeKeys } from '../sdk/src/utils/keys.js'
 import { Wallet } from '../sdk/src/utils/wallet.js'
 import * as log from './log.js'
@@ -113,7 +114,6 @@ async function main() {
           Response.json({ channelId, message: 'Channel opened by server' }),
         ) as Response
 
-        // receipt.reference format: "open:{channelId}:{txHash}"
         const receiptHeader = openResponse.headers.get('Payment-Receipt')
         if (!receiptHeader) {
           res.statusCode = 500
@@ -121,14 +121,15 @@ async function main() {
           return
         }
 
-        const receipt = Receipt.deserialize(receiptHeader)
-        const parts = receipt.reference.split(':')
-        channelId = parts[1] ?? null
-        const openTxHash = parts[2] ?? ''
+        // Named fields rather than splitting `reference` on colons, which is
+        // what this demo used to do.
+        const receipt = Receipt.deserialize(receiptHeader) as Receipt.Receipt & XrplReceiptFields
+        channelId = receipt.channelId ?? null
+        const openTxHash = receipt.txHash ?? ''
 
         if (!channelId) {
           res.statusCode = 500
-          res.end('Could not extract channelId from receipt reference')
+          res.end('Open receipt carried no channelId')
           return
         }
 
@@ -237,11 +238,14 @@ async function main() {
     log.error('No Payment-Receipt header in open response')
     process.exit(1)
   }
-  const openReceipt = Receipt.deserialize(receiptHeader)
-  // receipt.reference format: "open:{channelId}:{txHash}"
-  const realChannelId = openReceipt.reference.split(':')[1]
+  const openReceipt = Receipt.deserialize(receiptHeader) as Receipt.Receipt & XrplReceiptFields
+  const realChannelId = openReceipt.channelId
+  if (!realChannelId) {
+    log.error('Open receipt carried no channelId')
+    process.exit(1)
+  }
   log.success(`Client received channelId: ${realChannelId}`)
-  log.info(`Open receipt reference: ${openReceipt.reference}`)
+  log.info(`Open receipt txHash: ${openReceipt.txHash}`)
   log.separator()
 
   // ── Phase 5: Make 3 paid voucher requests ─────────────────────────────────

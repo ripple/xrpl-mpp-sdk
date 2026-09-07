@@ -553,9 +553,15 @@ export function channel(parameters: channel.Parameters) {
       })
     }
 
+    // No `txHash`: a voucher settles nothing on its own, and there is no
+    // transaction until the channel is closed. The channel and the cumulative
+    // are the facts a caller can act on, so they get their own names instead
+    // of being packed into `reference`. See XrplReceiptFields.
     return Receipt.from({
       method: 'xrpl',
       reference: `${channelId}:${payload.amount}`,
+      channelId,
+      cumulative: payload.amount,
       ...(challenge.id ? { externalId: challenge.id } : {}),
       status: 'success',
       timestamp: new Date().toISOString(),
@@ -761,9 +767,15 @@ export function channel(parameters: channel.Parameters) {
       // with one it is the same key by the allowlist check above.
       activeChannels.set(channelId, openPublicKey)
 
+      // The open action does settle a transaction, so it carries a `txHash`
+      // as a charge does -- previously it was the third colon-delimited part
+      // of `reference`, which our own demos had to split apart.
       return Receipt.from({
         method: 'xrpl',
         reference: `open:${channelId}:${txHash}`,
+        channelId,
+        txHash,
+        ...(initialAmountBig > 0n ? { cumulative: initialAmount } : {}),
         ...(challenge.id ? { externalId: challenge.id } : {}),
         status: 'success',
         timestamp: new Date().toISOString(),

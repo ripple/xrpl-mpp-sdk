@@ -422,6 +422,41 @@ export type ChargeServerConfig = {
   rpcUrl?: string
 }
 
+/**
+ * Receipt fields this method adds to the base MPP receipt.
+ *
+ * The base receipt carries a single `reference`, which the core specification
+ * defines as method-specific. Ours held the settled transaction hash for a
+ * charge, a `channelId:cumulative` pair for a session voucher, and an
+ * `open:channelId:txHash` triple for a channel open -- three shapes behind one
+ * name, none of them discoverable. A consumer looking for a transaction hash
+ * found no field with that name, and string-splitting was the only way in.
+ *
+ * So the parts are named. `reference` keeps its previous value in every case,
+ * because it is what the specification asks for and something may already read
+ * it; these fields are additive.
+ *
+ * The base schema is a loose object and the core specification allows methods
+ * to extend it, so unknown fields survive a serialize/parse round trip.
+ * `solana` and `nearintents` name their hashes the same way.
+ */
+export type XrplReceiptFields = {
+  /**
+   * Settled XRPL transaction hash, 64 uppercase hex.
+   *
+   * Present on a charge, and on a session `open` where the server submitted
+   * the `PaymentChannelCreate`. Absent on a session voucher, which settles
+   * nothing on its own -- there is no transaction until the channel is closed.
+   */
+  txHash?: string
+  /** Index of the validated ledger the transaction settled in. */
+  ledgerIndex?: number
+  /** Channel the payment went through. Session intent only. */
+  channelId?: string
+  /** Cumulative drops authorised over the channel's life, after this voucher. */
+  cumulative?: string
+}
+
 export type ChannelClientConfig = {
   /** Funder wallet. Preferred over `seed`. */
   wallet?: Wallet

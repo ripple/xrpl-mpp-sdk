@@ -506,14 +506,40 @@ The channel is always read from the ledger, because it is the ledger that names 
 - **Claims verify against the channel's on-ledger `PublicKey`.** There is no configured key: a client's channel key is chosen in its own `PaymentChannelCreate`, so a server accepting callers it has not met could never know it. A `channelLookup` that omits the field is an error rather than a fallback, since nothing else names a key.
 - **The credential's sender must equal the channel's `Account`.** Not an address derived from the channel key: the protocol lets a channel name any key, and a funder is encouraged to dedicate a key pair to it, so those two addresses legitimately differ.
 
-`recipient` defaults to the address of `wallet` / `seed` when either is supplied, and passing both with different addresses is rejected at construction. Supplying none of the three skips the destination check and emits a warning.
+**`recipient` and `wallet` name the same account, but are not the same thing.** `recipient` is a fact about the payment: the address the channel must pay, checked against the on-ledger `Destination`. `wallet` is a capability: the key that signs the closing claim. Passing two different addresses is rejected at construction.
+
+That is why either one alone is useful. `recipient` alone verifies vouchers with no key in the process -- auto-close switches itself off, and passing it explicitly is refused -- which is the shape for replicas that serve traffic while a separate process holds the key and collects. `wallet` alone derives `recipient` from it and turns auto-close on, the single-process shortcut. Supplying neither skips the destination check and emits a warning.
 
 **Liveness is enforced, not just observed.** A voucher is only worth what can still be redeemed against it:
 
 - **`SettleDelay` must be at least `minSettleDelay`** (default 1 hour). That is the window in which the recipient can still redeem after the funder initiates close; below it, the funder could reclaim unredeemed value faster than this server notices and submits a claim. Rejected with `CHANNEL_SETTLE_DELAY_TOO_SHORT`.
 - **A closing channel is refused, not merely flagged.** Once the channel is within `settlementMarginMs` of `Expiration` or `CancelAfter`, vouchers are rejected with `CHANNEL_CLOSING`, because redemption needs a `PaymentChannelClaim` submitted and validated. `CancelAfter` used to be advisory: it fired a callback and the voucher was still honoured.
 - **The metadata cache cannot outlive the deadline.** The effective TTL shrinks to a third of the remaining window, so the last look before a close is always fresh without paying for a lookup per voucher.
-- **`onVoucherAccepted` reports exposure** after each accepted voucher: funded amount, remaining redeemable drops, and close time. Use it to bound how much unsettled value you serve against one channel. It is a callback rather than receipt metadata because mppx's `Receipt` shape is fixed.
+- **`onVoucherAccepted` reports exposure** after each accepted voucher: funded amount, remaining redeemable drops, and close time. Use it to bound how much unsettled value you serve against one channel. It is a callback rather than receipt metadata because the figures are the server's own risk view, not something the payer needs.
+
+### Receipt fields
+
+The base MPP receipt carries one `reference`, which the core specification defines as method-specific. This method also names its parts, because a single opaque field is not something a consumer can read without knowing the method:
+
+| Field | Charge | Session voucher | Session open |
+|---|---|---|---|
+| `txHash` | settled hash | -- | hash of the submitted `PaymentChannelCreate` |
+| `ledgerIndex` | validated ledger | -- | -- |
+| `channelId` | -- | yes | yes |
+| `cumulative` | -- | total after this voucher | initial commitment, when non-zero |
+| `reference` | same as `txHash` | `channelId:cumulative` | `open:channelId:txHash` |
+
+A voucher has no `txHash` because it settles nothing on its own: there is no transaction until the channel is closed.
+
+`reference` keeps the value it always had, so nothing that reads it breaks. The named fields are additive, and survive the header round trip because the base schema is a loose object and the specification allows a method to extend it. `solana` and `nearintents` name their hashes the same way.
+
+```ts
+import type { XrplReceiptFields } from 'xrpl-mpp-sdk/server'
+
+const receipt = Receipt.fromResponse(response) as Receipt.Receipt & XrplReceiptFields
+receipt.txHash      // '3E4A...'  no string-splitting needed
+receipt.ledgerIndex // 19831837
+```
 
 ### Client options (channel)
 

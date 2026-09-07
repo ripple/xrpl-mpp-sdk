@@ -658,9 +658,14 @@ async function verifyPush(
     })
   }
 
+  // `txHash` alongside `reference`, which carries the same value: `reference`
+  // is what the specification asks for, and a hash under its own name is what
+  // a consumer looks for. See XrplReceiptFields.
   return Receipt.from({
     method: 'xrpl',
     reference: txHash,
+    txHash,
+    ...(typeof txLedgerIndex === 'number' ? { ledgerIndex: txLedgerIndex } : {}),
     ...(challengeId ? { externalId: challengeId } : {}),
     status: 'success',
     timestamp: new Date().toISOString(),
@@ -715,7 +720,7 @@ async function verifyPull(
   if (txHash) {
     // Same finality wait as push mode: validated, carrying a ledger index, and
     // deep enough. Throws on timeout rather than returning a sentinel.
-    await awaitFinality(client, txHash, {
+    const { txLedgerIndex } = await awaitFinality(client, txHash, {
       minConfirmations: minLedgerConfirmations,
       pollTimeout,
       pollInterval,
@@ -732,6 +737,8 @@ async function verifyPull(
     return Receipt.from({
       method: 'xrpl',
       reference: txHash,
+      txHash,
+      ...(typeof txLedgerIndex === 'number' ? { ledgerIndex: txLedgerIndex } : {}),
       ...(challengeId ? { externalId: challengeId } : {}),
       status: 'success',
       timestamp: new Date().toISOString(),
