@@ -15,7 +15,7 @@ import {
 } from '../../errors.js'
 import type { ChannelServerConfig } from '../../types.js'
 import { dropsToXrpString } from '../../utils/amount.js'
-import { classicAddressFromDID, classicAddressFromPublicKey } from '../../utils/did.js'
+import { classicAddressFromDID } from '../../utils/did.js'
 import { type StoreKeys, storeKeys } from '../../utils/keys.js'
 import { assertTxExpiresWithinChallenge, readCurrentLedgerIndex } from '../../utils/ledger-time.js'
 import { assertRouteTermsMatch } from '../../utils/route.js'

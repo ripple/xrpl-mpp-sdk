@@ -219,7 +219,6 @@ describe('metadata cache cannot consume the settlement margin', () => {
     const { Store } = await import('mppx')
     const { Wallet } = await import('../../sdk/src/utils/wallet.js')
 
-    const funder = Wallet.generate()
     const recipient = Wallet.generate()
 
     // Defaults are 60s TTL against a 60s margin, which is exactly the case the
@@ -249,7 +248,6 @@ describe('metadata cache cannot consume the settlement margin', () => {
     }) as typeof process.emitWarning
 
     try {
-      const funder = Wallet.generate()
       const recipient = Wallet.generate()
       serverChannel({
         recipient: recipient.address,

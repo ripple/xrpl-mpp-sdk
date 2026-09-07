@@ -404,7 +404,6 @@ async function runScenarioB(): Promise<ScenarioResult> {
  */
 function startMarketplaceServer(args: {
   wallet: Wallet
-  funderPublicKey: string
   store: Store.AtomicStore
   onClose: (info: { channelId: string; cumulative: string; txHash: string }) => void
   onError?: (err: { channelId: string; error: Error }) => void
@@ -413,7 +412,7 @@ function startMarketplaceServer(args: {
   channelMethod: ReturnType<typeof serverChannel>
   close: () => Promise<void>
 }> {
-  const { wallet, funderPublicKey, store, onClose, onError } = args
+  const { wallet, store, onClose, onError } = args
   const channelMethod = serverChannel({
     network: NETWORK,
     store,
@@ -593,7 +592,6 @@ async function runScenarioC(): Promise<ScenarioResult> {
   log.loading('Starting HTTP marketplace server with autoClose enabled...')
   const server = await startMarketplaceServer({
     wallet: recipient,
-    funderPublicKey: funder.publicKey,
     store,
     onClose: (info) => {
       fired = info
