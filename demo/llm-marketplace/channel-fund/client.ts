@@ -301,17 +301,6 @@ async function main() {
   log.info('Per-call price: not advertised here -- will arrive in each /complete 402')
   log.separator()
 
-  log.loading('POST /register -- sharing publicKey with marketplace...')
-  const regRes = await rawFetch(`${BASE}/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ publicKey: wallet.publicKey }),
-  })
-  if (!regRes.ok) {
-    log.error(`Register failed: ${regRes.status} ${await regRes.text()}`)
-    process.exit(1)
-  }
-  log.success('Marketplace armed -- ready to open the channel via MPP')
   log.separator()
 
   // Tiny initial deposit. Just enough for prompt 1's worst-case quote;

@@ -18,6 +18,9 @@ function freshChannel(funder: Wallet, recipient: string, amount: string): PayCha
     Balance: '0',
     Expiration: null,
     CancelAfter: null,
+    // A real PayChannel always names the key its claims verify against, and
+    // the server now reads it from here rather than from configuration.
+    PublicKey: funder.publicKey,
   }
 }
 
@@ -66,12 +69,10 @@ describe('channel server -- on-chain verification with injected lookup', () => {
     const lookup: ChannelLookup = vi.fn(async () => ledgerEntry)
 
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
     })
 
@@ -92,12 +93,10 @@ describe('channel server -- on-chain verification with injected lookup', () => {
     const lookup: ChannelLookup = vi.fn(async () => ledgerEntry)
 
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
     })
 
@@ -125,15 +124,14 @@ describe('channel server -- on-chain verification with injected lookup', () => {
       Balance: '0',
       Expiration: null,
       CancelAfter: null,
+      PublicKey: funder.publicKey,
     }))
 
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
     })
 
@@ -157,12 +155,10 @@ describe('channel server -- on-chain verification with injected lookup', () => {
     const lookup: ChannelLookup = vi.fn(async () => null)
 
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient: 'rf5kMNrUqgLzJT8YUzxM1pptc5r3Lfx1J9',
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
     })
 
@@ -183,15 +179,14 @@ describe('channel server -- on-chain verification with injected lookup', () => {
       Balance: '0',
       Expiration: expiredAt,
       CancelAfter: null,
+      PublicKey: funder.publicKey,
     }))
 
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
     })
 
@@ -211,16 +206,15 @@ describe('channel server -- on-chain verification with injected lookup', () => {
       Balance: '0',
       Expiration: null,
       CancelAfter: futureCancel,
+      PublicKey: funder.publicKey,
     }))
 
     const onDisputeDetected = vi.fn()
     const method = serverChannel({
-      publicKey: funder.publicKey,
       recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
       onDisputeDetected,
     })

@@ -118,10 +118,39 @@ async function main() {
   // type-checks against it.
   const buildMppx = (channelMethod: ReturnType<typeof channel>) =>
     Mppx.create({ secretKey: MPPX_SECRET, methods: [channelMethod] })
-  let mppx: ReturnType<typeof buildMppx> | null = null
+  // Nothing about the payer is needed at construction: each claim verifies
+  // against the key its own channel names on the ledger. There is therefore no
+  // registration step.
+  //
+  // Passing `wallet` enables MPP-spec server-initiated close (see
+  // https://mpp.dev/payment-methods/tempo/session): a background sweeper
+  // submits a PaymentChannelClaim with the latest voucher whenever a channel
+  // goes idle, then marks it finalized so subsequent vouchers are rejected
+  // with CHANNEL_CLOSED.
+  const mppx = buildMppx(
+    channel({
+      network: NETWORK,
+      store,
+      // Development only: process-local store, unsafe above one instance.
+      storeDurability: 'process-local',
+      wallet,
+      autoClose: {
+        onClose: ({ channelId: cid, cumulative, txHash }) => {
+          log.success(
+            `Auto-closed channel ${cid.slice(0, 16)}... -- claimed cumulative ${cumulative} drops`,
+          )
+          log.tx(txHash, log.explorerLink(txHash))
+        },
+      },
+    }),
+  )
   /** The 402-gated request handler a session challenge produces. */
   type SessionHandler = ReturnType<ReturnType<typeof buildMppx>['xrpl/session']>
-  let openHandler: SessionHandler | null = null
+  const openHandler: SessionHandler = mppx['xrpl/session']({
+    amount: '0',
+    channelId: '',
+    recipient: wallet.address,
+  })
   let channelId: string | null = null
   let voucherHandler: SessionHandler | null = null
 
@@ -151,57 +180,7 @@ async function main() {
         return
       }
 
-      if (method === 'POST' && path === '/register') {
-        const raw = await readBody(req)
-        const { publicKey } = JSON.parse(raw) as { publicKey: string }
-        if (!publicKey) {
-          res.writeHead(400)
-          res.end('publicKey required')
-          return
-        }
-
-        // Passing `wallet` enables MPP-spec server-initiated close (see
-        // https://mpp.dev/payment-methods/tempo/session): a background
-        // sweeper submits a PaymentChannelClaim with the latest voucher
-        // whenever a channel goes idle, then marks it finalized so
-        // subsequent vouchers are rejected with CHANNEL_CLOSED.
-        const channelMethod = channel({
-          publicKey,
-          network: NETWORK,
-          store,
-          // Development only: process-local store, unsafe above one instance.
-          storeDurability: 'process-local',
-          wallet,
-          autoClose: {
-            onClose: ({ channelId: cid, cumulative, txHash }) => {
-              log.success(
-                `Auto-closed channel ${cid.slice(0, 16)}... -- ` +
-                  `claimed cumulative ${cumulative} drops`,
-              )
-              log.tx(txHash, log.explorerLink(txHash))
-            },
-          },
-        })
-        mppx = buildMppx(channelMethod)
-
-        openHandler = mppx['xrpl/session']({
-          amount: '0',
-          channelId: '',
-          recipient: wallet.address,
-        })
-
-        log.info(`Registered payer publicKey: ${publicKey.slice(0, 16)}...`)
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ ok: true, recipient: wallet.address }))
-        return
-      }
-
       if (method === 'GET' && path === '/open') {
-        if (!openHandler || !mppx) {
-          res.writeHead(503)
-          res.end('Server not configured -- POST /register first')
-          return
-        }
         log.request(method, path)
         const result = await openHandler(toWebRequest(req))
 
@@ -249,7 +228,7 @@ async function main() {
       }
 
       if (method === 'POST' && path === '/complete') {
-        if (!voucherHandler || !mppx || !channelId) {
+        if (!voucherHandler || !channelId) {
           res.writeHead(503)
           res.end('Channel not open yet -- GET /open first')
           return
@@ -409,7 +388,6 @@ async function main() {
       'Endpoints:',
       '',
       'GET  /info       -> marketplace address + model (no pricing -- see 402)',
-      'POST /register   -> { publicKey } -> arms the xrpl/channel server method',
       'GET  /open       -> 402 (action: open) -> server submits PaymentChannelCreate',
       'POST /complete   -> 402 (action: voucher) -> SSE token stream on success',
       '                    402 with Problem Details `amount-exceeds-deposit`',

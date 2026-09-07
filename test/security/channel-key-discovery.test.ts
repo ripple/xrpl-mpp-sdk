@@ -12,12 +12,11 @@ const NETWORK = 'testnet'
 /**
  * A server cannot know a client's channel key before that client opens a
  * channel: the key is chosen in the client's own `PaymentChannelCreate`. So
- * `publicKey` is an allowlist for a bilateral arrangement, not a requirement,
- * and with it unset each channel is verified against the key it names on the
- * ledger.
+ * there is no key to configure, and each channel is verified against the key
+ * it names on the ledger.
  *
- * Two things follow, and both are covered here. Funders are no longer limited
- * to one, and a channel key no longer has to be the funder's account key --
+ * Two things follow, and both are covered here. Funders are not limited to
+ * one, and a channel key does not have to be the funder's account key --
  * the protocol lets a funder dedicate a key pair to the channel, which the
  * ledger documentation encourages.
  */
@@ -78,14 +77,13 @@ describe('channel key discovered from the ledger', () => {
     store = Store.memory()
   })
 
-  /** A server that accepts any funder: no `publicKey` configured. */
+  /** A server that accepts any funder, which is now the only kind. */
   function openServer(lookup: ChannelLookup, overrides: Record<string, unknown> = {}) {
     return serverChannel({
       recipient: recipient.address,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
       ...overrides,
     })
@@ -223,57 +221,12 @@ describe('channel key discovered from the ledger', () => {
     ).rejects.toThrow(/SOURCE_MISMATCH/)
   })
 
-  it('still enforces a configured publicKey as an allowlist', async () => {
-    const allowed = Wallet.generate()
-    const other = Wallet.generate()
-    const channelId = 'f'.repeat(64)
-
-    const lookup = vi.fn(async () =>
-      ledgerEntry({
-        Account: other.address,
-        Destination: recipient.address,
-        PublicKey: other.publicKey,
-      }),
-    )
-
-    const v = voucher({
-      signer: other,
-      sender: other,
-      channelId,
-      cumulative: '100000',
-      recipient: recipient.address,
-    })
-
-    await expect(
-      openServer(lookup, { publicKey: allowed.publicKey }).verify({
-        credential: v.cred as any,
-        request: v.challenge.request,
-      }),
-    ).rejects.toThrow(/SOURCE_MISMATCH|INVALID_SIGNATURE/)
-  })
-
-  it('refuses to construct without a key and without the ledger', () => {
-    // The configured key is the only key that mode has, so leaving it out
-    // leaves nothing to verify against.
-    expect(() =>
-      serverChannel({
-        recipient: recipient.address,
-        network: NETWORK,
-        store,
-        storeDurability: 'process-local',
-        verifyChannelOnChain: false,
-        allowUnverifiedChannels: true,
-      }),
-    ).toThrow(/verifyChannelOnChain: false requires `publicKey`/)
-  })
-
-  it('reports a lookup that omits PublicKey when no key is configured', async () => {
+  it('reports a lookup that omits PublicKey', async () => {
     const funder = Wallet.generate()
     const channelId = '9'.repeat(64)
 
-    // A custom channelLookup may not surface the field. With a configured key
-    // that is survivable; without one there is no key at all, and saying so
-    // beats verifying against undefined.
+    // A custom channelLookup may not surface the field. There is then no key
+    // at all, and saying so beats verifying against undefined.
     const lookup = vi.fn(async () =>
       ledgerEntry({ Account: funder.address, Destination: recipient.address }),
     )
@@ -289,28 +242,5 @@ describe('channel key discovered from the ledger', () => {
     await expect(
       openServer(lookup).verify({ credential: v.cred as any, request: v.challenge.request }),
     ).rejects.toThrow(/no key to verify claims against/)
-  })
-
-  it('keeps the configured key usable when a lookup omits PublicKey', async () => {
-    const funder = Wallet.generate()
-    const channelId = '8'.repeat(64)
-
-    const lookup = vi.fn(async () =>
-      ledgerEntry({ Account: funder.address, Destination: recipient.address }),
-    )
-
-    const v = voucher({
-      signer: funder,
-      sender: funder,
-      channelId,
-      cumulative: '100000',
-      recipient: recipient.address,
-    })
-
-    const result = await openServer(lookup, { publicKey: funder.publicKey }).verify({
-      credential: v.cred as any,
-      request: v.challenge.request,
-    })
-    expect(result.status).toBe('success')
   })
 })

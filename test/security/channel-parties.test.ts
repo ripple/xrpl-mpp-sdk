@@ -65,12 +65,10 @@ describe('channel party verification against ledger state', () => {
 
   function method(lookup: ChannelLookup, overrides: Record<string, unknown> = {}) {
     return serverChannel({
-      publicKey: funder.publicKey,
       recipient: recipient.address,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
       ...overrides,
     })
@@ -126,12 +124,14 @@ describe('channel party verification against ledger state', () => {
     ).rejects.toThrow(/CHANNEL_DESTINATION_MISMATCH/)
   })
 
-  it('rejects a forged signature without touching the ledger', async () => {
-    // Ordering matters the other way round: the signature check is local and
-    // free, the lookup opens a WebSocket. `credential.source` is unauthenticated
-    // and the funder address is public, so anyone can send a voucher with a
-    // garbage signature for a real channelId. Checking the ledger first gave an
-    // attacker request amplification against this server and its rippled.
+  it('rejects a forged signature, at the cost of one lookup', async () => {
+    // The channel names the key its claims verify against, so the lookup has
+    // to run before the signature can be checked at all. A forged voucher for
+    // an unknown channelId therefore costs one lookup -- the price of
+    // accepting funders the server has not met. Metadata is cached per
+    // channel, so an established channel costs nothing and a repeated
+    // fabricated id is absorbed; a flood of distinct ones is not, and a public
+    // deployment should rate-limit ahead of this.
     const lookup = vi.fn(async () =>
       ledgerEntry({
         Account: funder.address,
@@ -146,7 +146,7 @@ describe('channel party verification against ledger state', () => {
       method(lookup).verify({ credential: v.cred as any, request: v.challenge.request }),
     ).rejects.toThrow(/INVALID_SIGNATURE/)
 
-    expect(lookup).not.toHaveBeenCalled()
+    expect(lookup).toHaveBeenCalledTimes(1)
   })
 
   it('still rejects a bad destination when the signature is genuine', async () => {
@@ -167,7 +167,10 @@ describe('channel party verification against ledger state', () => {
     expect(lookup).toHaveBeenCalled()
   })
 
-  it('rejects a channel funded by a different public key', async () => {
+  it("rejects a channel that is someone else's", async () => {
+    // Signed by our funder, but the channel belongs to another account and
+    // names another key. The signature check reaches it first, which is the
+    // cheaper refusal.
     const otherFunder = Wallet.generate()
     const lookup = vi.fn(async () =>
       ledgerEntry({
@@ -180,10 +183,14 @@ describe('channel party verification against ledger state', () => {
 
     await expect(
       method(lookup).verify({ credential: v.cred as any, request: v.challenge.request }),
-    ).rejects.toThrow(/SOURCE_MISMATCH/)
+    ).rejects.toThrow(/INVALID_SIGNATURE/)
   })
 
-  it('rejects a channel whose Account does not derive from its PublicKey', async () => {
+  it("rejects a credential sent from someone other than the channel's Account", async () => {
+    // The channel names our funder's key, so the claim verifies -- but the
+    // channel belongs to a different account, and the sender must be that
+    // account. This replaced a check that the Account derive from the channel
+    // key, which the protocol does not require.
     const impostor = Wallet.generate()
     const lookup = vi.fn(async () =>
       ledgerEntry({
@@ -199,29 +206,15 @@ describe('channel party verification against ledger state', () => {
     ).rejects.toThrow(/SOURCE_MISMATCH/)
   })
 
-  it('verifies claims against the on-ledger PublicKey', async () => {
-    // The on-ledger key is authoritative. A claim signed by the funder whose
-    // key the ledger reports must verify even though the SDK was handed the
-    // same value as configuration -- proving the ledger value is the one used.
+  it('verifies claims against the on-ledger PublicKey whatever its casing', async () => {
+    // Hex is case-insensitive as a value, and a lookup may report either
+    // casing. The key is the ledger's, so both spellings must verify.
     const lookup = vi.fn(async () =>
       ledgerEntry({
         Account: funder.address,
         Destination: recipient.address,
         PublicKey: funder.publicKey.toLowerCase(),
       }),
-    )
-    const v = voucher(funder, CHANNEL_ID, '100000', recipient.address)
-
-    const result = await method(lookup).verify({
-      credential: v.cred as any,
-      request: v.challenge.request,
-    })
-    expect(result.status).toBe('success')
-  })
-
-  it('falls back to the configured key when a custom lookup omits PublicKey', async () => {
-    const lookup = vi.fn(async () =>
-      ledgerEntry({ Account: funder.address, Destination: recipient.address }),
     )
     const v = voucher(funder, CHANNEL_ID, '100000', recipient.address)
 
@@ -243,12 +236,10 @@ describe('channel party verification against ledger state', () => {
     const v = voucher(funder, CHANNEL_ID, '100000', recipient.address)
 
     const withWallet = serverChannel({
-      publicKey: funder.publicKey,
       wallet: recipient,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
       autoClose: false,
     })
@@ -261,7 +252,6 @@ describe('channel party verification against ledger state', () => {
   it('throws when recipient and wallet disagree', () => {
     expect(() =>
       serverChannel({
-        publicKey: funder.publicKey,
         recipient: recipient.address,
         wallet: Wallet.generate(),
         network: NETWORK,
@@ -275,7 +265,6 @@ describe('channel party verification against ledger state', () => {
   it('warns when neither recipient nor wallet is configured', () => {
     const warn = vi.spyOn(process, 'emitWarning').mockImplementation(() => {})
     serverChannel({
-      publicKey: funder.publicKey,
       network: NETWORK,
       store,
       storeDurability: 'process-local',

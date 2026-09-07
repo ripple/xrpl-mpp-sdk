@@ -187,7 +187,6 @@ async function runScenarioA(): Promise<ScenarioResult> {
 
   const store = Store.memory()
   const method = serverChannel({
-    publicKey: funder.publicKey,
     network: NETWORK,
     store,
     // Development only: process-local store, unsafe above one instance.
@@ -288,7 +287,6 @@ async function runScenarioB(): Promise<ScenarioResult> {
   let errored: { error: Error } | null = null
   const store = Store.memory()
   const method = serverChannel({
-    publicKey: funder.publicKey,
     network: NETWORK,
     store,
     // Development only: process-local store, unsafe above one instance.
@@ -417,7 +415,6 @@ function startMarketplaceServer(args: {
 }> {
   const { wallet, funderPublicKey, store, onClose, onError } = args
   const channelMethod = serverChannel({
-    publicKey: funderPublicKey,
     network: NETWORK,
     store,
     // Development only: process-local store, unsafe above one instance.

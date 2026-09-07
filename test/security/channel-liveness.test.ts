@@ -48,12 +48,10 @@ describe('channel liveness', () => {
 
   function method(lookup: any, overrides: Record<string, unknown> = {}) {
     return serverChannel({
-      publicKey: funder.publicKey,
       recipient: recipient.address,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
       channelLookup: lookup,
       ...overrides,
     })
@@ -190,35 +188,6 @@ describe('channel liveness', () => {
     })
   })
 
-  describe('unverified channels', () => {
-    it('refuses to construct with verification off and no acknowledgement', () => {
-      expect(() =>
-        serverChannel({
-          publicKey: funder.publicKey,
-          recipient: recipient.address,
-          network: NETWORK,
-          store,
-          storeDurability: 'process-local',
-          verifyChannelOnChain: false,
-        }),
-      ).toThrow(/allowUnverifiedChannels/)
-    })
-
-    it('constructs once the risk is acknowledged', () => {
-      expect(() =>
-        serverChannel({
-          publicKey: funder.publicKey,
-          recipient: recipient.address,
-          network: NETWORK,
-          store,
-          storeDurability: 'process-local',
-          verifyChannelOnChain: false,
-          allowUnverifiedChannels: true,
-        }),
-      ).not.toThrow()
-    })
-  })
-
   describe('exposure reporting', () => {
     it('reports remaining redeemable value and close time', async () => {
       const onVoucherAccepted = vi.fn()
@@ -258,13 +227,10 @@ describe('metadata cache cannot consume the settlement margin', () => {
     // rejected, so an operator who tuned for latency still boots.
     expect(() =>
       channel({
-        publicKey: funder.publicKey,
         recipient: recipient.address,
         network: 'testnet',
         store: Store.memory(),
         storeDurability: 'process-local',
-        verifyChannelOnChain: false,
-        allowUnverifiedChannels: true,
         channelMetadataTtlMs: 600_000,
         settlementMarginMs: 60_000,
       }),
@@ -286,13 +252,10 @@ describe('metadata cache cannot consume the settlement margin', () => {
       const funder = Wallet.generate()
       const recipient = Wallet.generate()
       serverChannel({
-        publicKey: funder.publicKey,
         recipient: recipient.address,
         network: 'devnet',
         store: Store.memory(),
         storeDurability: 'process-local',
-        verifyChannelOnChain: false,
-        allowUnverifiedChannels: true,
       })
     } finally {
       process.emitWarning = original

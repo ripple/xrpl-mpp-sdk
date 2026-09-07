@@ -252,16 +252,23 @@ describe('credential source binding (DID -> on-chain payer)', () => {
         source: `did:pkh:xrpl:${NETWORK}:${attacker.address}`,
       })
 
+      // The channel is read from the ledger, so the funder identity the
+      // credential is bound to comes from there too.
       const method = serverChannel({
-        publicKey: funder.publicKey,
         store: Store.memory(),
         storeDurability: 'process-local',
-        // Not exercised here (verifyChannelOnChain is off); set so the missing-
-        // recipient diagnostic does not fire.
         recipient: CHANNEL_RECIPIENT,
         network: NETWORK,
-        verifyChannelOnChain: false,
-        allowUnverifiedChannels: true,
+        channelLookup: async () => ({
+          Account: funder.address,
+          Destination: CHANNEL_RECIPIENT,
+          Amount: '10000000',
+          Balance: '0',
+          SettleDelay: 3600,
+          Expiration: null,
+          CancelAfter: null,
+          PublicKey: funder.publicKey,
+        }),
       })
 
       await expect(
@@ -296,16 +303,23 @@ describe('credential source binding (DID -> on-chain payer)', () => {
         source: `did:pkh:xrpl:${NETWORK}:${funder.address}`,
       })
 
+      // The channel is read from the ledger, so the funder identity the
+      // credential is bound to comes from there too.
       const method = serverChannel({
-        publicKey: funder.publicKey,
         store: Store.memory(),
         storeDurability: 'process-local',
-        // Not exercised here (verifyChannelOnChain is off); set so the missing-
-        // recipient diagnostic does not fire.
         recipient: CHANNEL_RECIPIENT,
         network: NETWORK,
-        verifyChannelOnChain: false,
-        allowUnverifiedChannels: true,
+        channelLookup: async () => ({
+          Account: funder.address,
+          Destination: CHANNEL_RECIPIENT,
+          Amount: '10000000',
+          Balance: '0',
+          SettleDelay: 3600,
+          Expiration: null,
+          CancelAfter: null,
+          PublicKey: funder.publicKey,
+        }),
       })
 
       const receipt = await method.verify({

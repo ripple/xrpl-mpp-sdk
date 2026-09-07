@@ -116,13 +116,10 @@ describe('input limits', () => {
       const channelId = 'A'.repeat(64)
 
       const method = serverChannel({
-        publicKey: funder.publicKey,
         recipient: recipient.address,
         network: NETWORK,
         store: Store.memory(),
         storeDurability: 'process-local',
-        verifyChannelOnChain: false,
-        allowUnverifiedChannels: true,
         maxCredentialSize: 256,
       })
 

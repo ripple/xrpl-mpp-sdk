@@ -98,12 +98,10 @@ describe('store key namespacing', () => {
 
     function method(network: 'testnet' | 'devnet') {
       return serverChannel({
-        publicKey: funder.publicKey,
         recipient: recipient.address,
         network,
         store,
         storeDurability: 'process-local',
-        verifyChannelOnChain: true,
         channelLookup: vi.fn(async () => entry()),
       })
     }

@@ -44,11 +44,9 @@ describe('integration: PayChannel lifecycle on devnet', () => {
 
     const store = Store.memory()
     const method = serverChannel({
-      publicKey: funder.publicKey,
       network: NETWORK,
       store,
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
     })
 
     let prev = '0'
@@ -129,7 +127,6 @@ describe('integration: PayChannel lifecycle on devnet', () => {
       network: NETWORK,
       store: Store.memory(),
       storeDurability: 'process-local',
-      verifyChannelOnChain: true,
     })
 
     async function payOnce(params: {
