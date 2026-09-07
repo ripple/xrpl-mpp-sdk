@@ -349,7 +349,8 @@ const mppx = Mppx.create({
   methods: [
     // `channelId` is what we opened. Pass it when the server advertises no
     // channel of its own, which is the case for a server serving callers it
-    // cannot know in advance.
+    // cannot know in advance. Passing `network` pins it: a challenge naming
+    // another one is refused rather than followed.
     channel({ seed: 'sEdV...', channelId, network: 'testnet' }),
   ],
   // See "Challenge-safe fetch" below. Required on mppx 0.8.x.
@@ -746,6 +747,8 @@ The server keys off the challenge ID, the transaction hash (charge), and the cum
 | `xrpl:{network}:channel-redeemed:{id}` | cumulative already claimed on-chain |
 
 The network segment is load-bearing, not cosmetic. Channel IDs and transaction hashes derive purely from transaction content, and mainnet, testnet, and devnet carry no `NetworkID` field on a Payment or a `PaymentChannelCreate`. A wallet built from one seed therefore has the same account and the same sequence space on every network, so the same account paying the same destination the same amount at the same sequence produces an **identical channelId and an identical transaction hash** on testnet and on mainnet. Without the namespace, one store shared across networks confuses their replay state in both directions: a testnet payment could mark a mainnet transaction hash as spent, and testnet activity could move a mainnet channel's high-water mark.
+
+The same rule binds the client. The session client remembers the highest cumulative it has signed per channel, so it can resume when a challenge names no channel and therefore reports no mark; that memory is keyed by network and channel together. Keyed by channel alone, a colliding ID makes the second network resume from the first's total and sign above what it was asked for. And passing `network` to either client method pins it: a challenge naming another one is refused with `CHALLENGE_REJECTED` rather than followed, which matters most on a channel open, where following it would deposit real XRP on a ledger the caller did not choose.
 
 ### Input limits
 

@@ -2,6 +2,7 @@ import { Credential, Method } from 'mppx'
 import { Client, signPaymentChannelClaim, unixTimeToRippleTime } from 'xrpl'
 import { z } from 'zod/mini'
 import { MPP_SOURCE_TAG, type NetworkId, XRPL_RPC_URLS } from '../../constants.js'
+import { challengeRejected } from '../../errors.js'
 import type { ChannelClientConfig } from '../../types.js'
 import { dropsToXrpString } from '../../utils/amount.js'
 import { lastLedgerSequenceFromExpires, readCurrentLedgerIndex } from '../../utils/ledger-time.js'
@@ -42,6 +43,11 @@ export function channel(parameters: channel.Parameters) {
     throw new Error('A wallet or seed is required for the client channel method.')
   }
 
+  // Distinguishes "explicitly chose testnet" from "did not say", which the
+  // destructured default cannot express. Only an explicit choice pins. Same
+  // rule as the charge client, and for the same reason.
+  const pinnedNetwork = parameters.network
+
   const wallet = resolveWallet({ wallet: walletInput, seed })
 
   /**
@@ -58,6 +64,14 @@ export function channel(parameters: channel.Parameters) {
    * higher. Process-local, which is the right scope: it is a floor, not a
    * ledger, and the server's high-water mark remains the authority. A restart
    * falls back to what the challenge reports.
+   *
+   * Keyed by network and channel, not by channel alone. A channel ID is
+   * derived from the funder, the destination and a sequence number, and the
+   * same seed controls the same address on every XRPL network -- so a channel
+   * opened to the same merchant from a fresh account collides across
+   * networks. Sharing a floor between them makes the second network sign
+   * above what it was asked for. The server namespaces its own high-water
+   * marks for exactly this reason.
    */
   const signedCumulative = new Map<string, bigint>()
 
@@ -77,7 +91,24 @@ export function channel(parameters: channel.Parameters) {
     async createCredential({ challenge, context }) {
       const { request } = challenge
       const { amount } = request
-      const network = (request.methodDetails?.network as string) ?? defaultNetwork
+      // The challenge names the ledger, and this client follows it -- the
+      // server knows which one it settles on. But the same seed controls the
+      // same address everywhere, so an unpinned client builds and signs
+      // wherever it is told to, and the open action deposits real XRP. A
+      // caller that passed `network` explicitly is pinning it.
+      const challengeNetwork = request.methodDetails?.network as string | undefined
+      if (
+        pinnedNetwork !== undefined &&
+        challengeNetwork !== undefined &&
+        challengeNetwork !== pinnedNetwork
+      ) {
+        throw challengeRejected(
+          `challenge is for the ${challengeNetwork} network but this client is pinned to ` +
+            `${pinnedNetwork}. Opening or paying a channel there would use a ledger the ` +
+            'caller did not choose.',
+        )
+      }
+      const network = challengeNetwork ?? defaultNetwork
 
       // The challenge wins when it names a channel: that is the server stating
       // which one it is charging through. It names none when it serves callers
@@ -155,7 +186,8 @@ export function channel(parameters: channel.Parameters) {
       }
 
       const reportedCumulative = BigInt(request.methodDetails?.cumulativeAmount ?? '0')
-      const ourCumulative = signedCumulative.get(channelId) ?? 0n
+      const markKey = `${network}:${channelId}`
+      const ourCumulative = signedCumulative.get(markKey) ?? 0n
       const previousCumulative =
         reportedCumulative > ourCumulative ? reportedCumulative : ourCumulative
       const cumulativeAmount =
@@ -176,7 +208,7 @@ export function channel(parameters: channel.Parameters) {
 
       const cumulativeXrp = dropsToXrpString(cumulativeStr)
       const signature = signPaymentChannelClaim(channelId, cumulativeXrp, wallet.privateKey)
-      if (cumulativeAmount > ourCumulative) signedCumulative.set(channelId, cumulativeAmount)
+      if (cumulativeAmount > ourCumulative) signedCumulative.set(markKey, cumulativeAmount)
 
       return Credential.serialize({
         challenge,
