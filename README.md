@@ -295,7 +295,11 @@ from -- does not stall it after the first request.
 
 Set a `channelId` only when the server decides which channel a route bills.
 The `open` action lets a channel be established through the 402 itself
-(`demo/channel-server-open.ts`), with no side channel at all.
+(`demo/channel-server-open.ts`), with no side channel at all: the challenge
+states the recipient, so pass an `openChannel` policy -- your deposit and
+settle delay -- and the client builds and signs the `PaymentChannelCreate`
+from the challenge. Nothing about the server has to be configured on the
+client.
 
 ```ts
 import { Mppx, Store } from 'mppx/server'
