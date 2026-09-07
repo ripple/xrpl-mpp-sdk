@@ -5,10 +5,14 @@ import { MPP_SOURCE_TAG, type NetworkId, XRPL_RPC_URLS } from '../../constants.j
 import { challengeRejected } from '../../errors.js'
 import type { ChannelClientConfig } from '../../types.js'
 import { dropsToXrpString } from '../../utils/amount.js'
+import { canonicalHex } from '../../utils/keys.js'
 import { lastLedgerSequenceFromExpires, readCurrentLedgerIndex } from '../../utils/ledger-time.js'
 import { assertReserveCovers, getReserveState } from '../../utils/reserves.js'
 import { resolveWallet, type Wallet } from '../../utils/wallet.js'
 import { channel as ChannelMethod } from '../Methods.js'
+
+/** Same shape the method schema enforces on the wire. */
+const CHANNEL_ID = /^[0-9A-Fa-f]{64}$/
 
 /**
  * Creates an XRPL channel method for use on the **client**.
@@ -65,7 +69,8 @@ export function channel(parameters: channel.Parameters) {
    * ledger, and the server's high-water mark remains the authority. A restart
    * falls back to what the challenge reports.
    *
-   * Keyed by network and channel, not by channel alone. A channel ID is
+   * Keyed by canonicalised channel and network, not by channel alone. A
+   * channel ID is
    * derived from the funder, the destination and a sequence number, and the
    * same seed controls the same address on every XRPL network -- so a channel
    * opened to the same merchant from a fresh account collides across
@@ -186,7 +191,27 @@ export function channel(parameters: channel.Parameters) {
       }
 
       const reportedCumulative = BigInt(request.methodDetails?.cumulativeAmount ?? '0')
-      const markKey = `${network}:${channelId}`
+      // Validate before keying rather than leaning on `signPaymentChannelClaim`
+      // to throw further down: a key layout that is only safe because some
+      // other layer rejects a bad value is one refactor away from not being.
+      // Canonicalised for the same reason the store keys are -- hex is
+      // case-insensitive as a value, so two spellings are one channel, and two
+      // marks for one channel makes the client re-sign a cumulative the server
+      // has already accepted and refuse it as a replay.
+      if (!channelId) {
+        throw new Error(
+          '[xrpl-mpp-sdk] no channelId: the challenge names none, and none was supplied. Pass ' +
+            '`channelId` to xrpl.channel() after opening the channel, or per request in the ' +
+            'method context.',
+        )
+      }
+      if (!CHANNEL_ID.test(channelId)) {
+        throw new Error(
+          `[xrpl-mpp-sdk] channelId must be 64 hexadecimal characters, got ${channelId.length}. ` +
+            'A claim is signed over it, so a malformed value cannot be paid with.',
+        )
+      }
+      const markKey = `${network}:${canonicalHex(channelId)}`
       const ourCumulative = signedCumulative.get(markKey) ?? 0n
       const previousCumulative =
         reportedCumulative > ourCumulative ? reportedCumulative : ourCumulative
@@ -198,14 +223,6 @@ export function channel(parameters: channel.Parameters) {
       const cumulativeStr = cumulativeAmount.toString()
 
       // signPaymentChannelClaim expects XRP, not drops -- it internally calls xrpToDrops.
-      if (!channelId) {
-        throw new Error(
-          '[xrpl-mpp-sdk] no channelId: the challenge names none, and none was supplied. Pass ' +
-            '`channelId` to xrpl.channel() after opening the channel, or per request in the ' +
-            'method context.',
-        )
-      }
-
       const cumulativeXrp = dropsToXrpString(cumulativeStr)
       const signature = signPaymentChannelClaim(channelId, cumulativeXrp, wallet.privateKey)
       if (cumulativeAmount > ourCumulative) signedCumulative.set(markKey, cumulativeAmount)

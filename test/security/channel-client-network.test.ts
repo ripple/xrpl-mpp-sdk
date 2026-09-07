@@ -15,8 +15,13 @@ const MERCHANT = 'rf5kMNrUqgLzJT8YUzxM1pptc5r3Lfx1J9'
  * The server already namespaces its high-water marks per network for this
  * reason. The client had to learn the same lesson twice.
  */
-function challenge(params: { network: string; amount: string; recipient?: string }) {
-  const { network, amount, recipient = MERCHANT } = params
+function challenge(params: {
+  network: string
+  amount: string
+  recipient?: string
+  channelId?: string
+}) {
+  const { network, amount, recipient = MERCHANT, channelId = CHANNEL } = params
   return {
     id: `n-${network}-${amount}`,
     realm: 'test',
@@ -26,7 +31,7 @@ function challenge(params: { network: string; amount: string; recipient?: string
     expires: new Date(Date.now() + 60_000).toISOString(),
     request: {
       amount,
-      channelId: CHANNEL,
+      channelId,
       recipient,
       methodDetails: { network },
     },
@@ -88,5 +93,35 @@ describe('channel client and the network', () => {
 
     const cred = await sign(method, challenge({ network: 'testnet', amount: '100000' }))
     expect(cred.payload.amount).toBe('100000')
+  })
+  it('treats two spellings of one channel as one mark', async () => {
+    // Hex is case-insensitive as a value, and the server canonicalises its own
+    // high-water keys. Two marks for one channel makes the client re-sign a
+    // cumulative the server already accepted, which it then refuses as a
+    // replay -- the client stalls at 402 with a valid channel and funds left.
+    const method = clientChannel({ wallet: Wallet.generate() })
+
+    const lower = await sign(
+      method,
+      challenge({ network: 'testnet', amount: '100000', channelId: CHANNEL.toLowerCase() }),
+    )
+    const upper = await sign(
+      method,
+      challenge({ network: 'testnet', amount: '100000', channelId: CHANNEL.toUpperCase() }),
+    )
+
+    expect(lower.payload.amount).toBe('100000')
+    expect(upper.payload.amount).toBe('200000')
+  })
+
+  it('refuses a malformed channelId rather than keying on it', async () => {
+    // The mark key must not depend on another layer rejecting a bad value:
+    // under a delimiter-joined key, a channelId carrying the delimiter could
+    // otherwise steer one channel's mark onto another's.
+    const method = clientChannel({ wallet: Wallet.generate() })
+
+    await expect(
+      sign(method, challenge({ network: 'testnet', amount: '1', channelId: `x:${CHANNEL}` })),
+    ).rejects.toThrow(/64 hexadecimal characters/)
   })
 })
