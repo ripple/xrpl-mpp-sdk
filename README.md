@@ -665,6 +665,19 @@ The SDK preflights every operation: reserve coverage on `createEscrow`, `FinishA
 
 ### Opening and closing channels
 
+> **Collecting is the server's responsibility.**
+>
+> Signed vouchers are not money. They become money only when the server posts a
+> claim on-chain. If a channel reaches its `Expiration` with vouchers
+> unredeemed, anyone can close it and **every undelivered drop returns to the
+> funder** -- the server keeps nothing, however many vouchers it holds.
+>
+> `autoClose` makes the common case automatic, but it is a convenience and not
+> a guarantee: it runs inside your server process, so a crash, a restart, a
+> lost ledger connection or an unreachable store will stop it sweeping.
+> Redemption stays the operator's responsibility -- monitor it, and reconcile
+> what a channel owes you against what it actually delivered.
+
 ```ts
 import { openChannel, fundChannel } from 'xrpl-mpp-sdk/channel/client'
 import { close } from 'xrpl-mpp-sdk/channel/server'
@@ -910,7 +923,7 @@ If you use a Redis-family store instead, it must be configured `noeviction` with
 An off-chain voucher is a **claim, not settled funds**. Redemption depends on the channel remaining open, funded, and pointed at your recipient address. Consequences for anyone metering service against vouchers:
 
 - Bound unsettled exposure per channel rather than serving unlimited value against a single channel.
-- Settle proactively. `autoClose` redeems channels idle beyond `idleMs` (30s default); shorten it for higher-value sessions.
+- Settle proactively. `autoClose` redeems channels idle beyond `idleMs` (30s default); shorten it for higher-value sessions. It runs in your process, so treat it as a convenience rather than a guarantee -- see [Opening and closing channels](#opening-and-closing-channels).
 - A funder can initiate close at any time. After `SettleDelay` elapses, unredeemed value is returned to them.
 
 See [MPP spec deviations](#mpp-spec-deviations) for the non-atomic close semantics this follows from.
@@ -1251,7 +1264,7 @@ The difference is timing, not capability:
 **What the SDK does.** Off-chain vouchers are worthless until someone posts a claim on-chain, so a client that walks away would leave the server holding signed claims and no money. The SDK closes from the server side:
 
 - **`closeFromStore()`** reads the highest cumulative voucher persisted for a channel and submits the claim with `tfClose`. Idempotent -- no-ops if already finalized or redeemed.
-- **Auto-close sweeper** (`autoClose`, on by default when a recipient `wallet` is provided) runs `closeFromStore` for any channel idle longer than `idleMs` (default 30s), then marks it finalized so later vouchers are rejected with `CHANNEL_EXPIRED`.
+- **Auto-close sweeper** (`autoClose`, on by default when a recipient `wallet` is provided) runs `closeFromStore` for any channel idle longer than `idleMs` (default 30s), then marks it finalized so later vouchers are rejected with `CHANNEL_EXPIRED`. In-process, so a crash or an unreachable store stops it: redemption stays the operator's to monitor.
 
 ```ts
 channel({
