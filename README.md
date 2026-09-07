@@ -506,7 +506,9 @@ The channel is always read from the ledger, because it is the ledger that names 
 - **Claims verify against the channel's on-ledger `PublicKey`.** There is no configured key: a client's channel key is chosen in its own `PaymentChannelCreate`, so a server accepting callers it has not met could never know it. A `channelLookup` that omits the field is an error rather than a fallback, since nothing else names a key.
 - **The credential's sender must equal the channel's `Account`.** Not an address derived from the channel key: the protocol lets a channel name any key, and a funder is encouraged to dedicate a key pair to it, so those two addresses legitimately differ.
 
-`recipient` defaults to the address of `wallet` / `seed` when either is supplied, and passing both with different addresses is rejected at construction. Supplying none of the three skips the destination check and emits a warning.
+**`recipient` and `wallet` name the same account, but are not the same thing.** `recipient` is a fact about the payment: the address the channel must pay, checked against the on-ledger `Destination`. `wallet` is a capability: the key that signs the closing claim. Passing two different addresses is rejected at construction.
+
+That is why either one alone is useful. `recipient` alone verifies vouchers with no key in the process -- auto-close switches itself off, and passing it explicitly is refused -- which is the shape for replicas that serve traffic while a separate process holds the key and collects. `wallet` alone derives `recipient` from it and turns auto-close on, the single-process shortcut. Supplying neither skips the destination check and emits a warning.
 
 **Liveness is enforced, not just observed.** A voucher is only worth what can still be redeemed against it:
 
