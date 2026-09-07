@@ -33,6 +33,7 @@ export function channel(parameters: channel.Parameters) {
     wallet: walletInput,
     seed,
     channelId: defaultChannelId,
+    openChannel: openChannelPolicy,
     network: defaultNetwork = 'testnet',
     rpcUrl: _defaultRpcUrl,
   } = parameters
@@ -87,9 +88,47 @@ export function channel(parameters: channel.Parameters) {
       const action = context?.action ?? 'voucher'
 
       if (action === 'open') {
-        if (!context?.openTransaction) {
-          throw new Error('openTransaction is required for action: open')
+        // Either the caller pre-built the transaction, or we build it here
+        // from the challenge. The second is the useful one: the challenge
+        // states the recipient, so the caller does not have to know the
+        // merchant's address before asking for the resource. What it cannot
+        // state is how much to deposit or for how long -- those are the
+        // payer's own risk decisions, and they come from `openChannel`.
+        let openTransaction = context?.openTransaction
+        if (!openTransaction) {
+          if (!openChannelPolicy) {
+            throw new Error(
+              '[xrpl-mpp-sdk] action: open needs either `openTransaction` in the method context, ' +
+                'or an `openChannel` policy on xrpl.channel() for the SDK to build one from the ' +
+                'challenge.',
+            )
+          }
+          const destination = request.recipient
+          if (!destination) {
+            throw new Error(
+              '[xrpl-mpp-sdk] the open challenge carries no `recipient`, so there is no ' +
+                'destination to open a channel towards.',
+            )
+          }
+          const prepared = await prepareOpenChannelTransaction({
+            wallet,
+            destination,
+            amount: openChannelPolicy.amount,
+            settleDelay: openChannelPolicy.settleDelay,
+            ...(openChannelPolicy.cancelAfter !== undefined
+              ? { cancelAfter: openChannelPolicy.cancelAfter }
+              : {}),
+            // Cap the transaction's on-ledger lifetime to the challenge it
+            // answers, so an open that arrives late cannot still settle.
+            ...((challenge as { expires?: string }).expires
+              ? { expiresAt: (challenge as { expires?: string }).expires }
+              : {}),
+            network: network as NetworkId,
+            ...(_defaultRpcUrl ? { rpcUrl: _defaultRpcUrl } : {}),
+          })
+          openTransaction = prepared.txBlob
         }
+
         const initialAmount = amount
         const initialXrp = dropsToXrpString(initialAmount)
         // The real channelId is unknown until the server broadcasts the open
@@ -107,7 +146,7 @@ export function channel(parameters: channel.Parameters) {
           challenge,
           payload: {
             action: 'open' as const,
-            transaction: context.openTransaction,
+            transaction: openTransaction,
             amount: initialAmount,
             signature,
           },

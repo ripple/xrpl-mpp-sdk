@@ -9,10 +9,11 @@
  * and submits the tx itself before telling the server the channelId.
  *
  * Flow:
- *   1. Client calls prepareOpenChannelTransaction() -- signs but does NOT submit
- *   2. Client GETs /open -> server issues a 402 challenge
- *   3. Mppx retries with context { action: 'open', openTransaction: txBlob }
- *   4. Server submits the blob, waits for ledger confirmation, extracts channelId
+ *   1. Client GETs /open -> server issues a 402 challenge naming the recipient
+ *   2. Mppx retries with context { action: 'open' }; the SDK builds and signs
+ *      the PaymentChannelCreate from the challenge, on the terms in
+ *      `openChannel`. The client never had to be told the server's address.
+ *   3. Server submits the blob, waits for ledger confirmation, extracts channelId
  *   5. Client reads channelId from the receipt reference
  *   6. Client makes 3 paid voucher requests (zero on-chain cost)
  *   7. Client closes the channel on-chain with the final cumulative claim
@@ -23,10 +24,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { Receipt } from 'mppx'
 import { Mppx as ClientMppx } from 'mppx/client'
 import { Mppx, Store } from 'mppx/server'
-import {
-  channel as clientChannel,
-  prepareOpenChannelTransaction,
-} from '../sdk/src/channel/client/Channel.js'
+import { channel as clientChannel } from '../sdk/src/channel/client/Channel.js'
 import { close, channel as serverChannel } from '../sdk/src/channel/server/Channel.js'
 import { bufferChallengeResponses } from '../sdk/src/client/fetch.js'
 import { storeKeys } from '../sdk/src/utils/keys.js'
@@ -71,19 +69,6 @@ async function main() {
   log.wallet('Server', server.address)
   log.wallet('Client', payer.address)
   log.key('Client public key', payer.publicKey)
-  log.separator()
-
-  // ── Phase 2: Client prepares (signs but does NOT submit) the open tx ──────
-  log.loading('Client preparing PaymentChannelCreate tx (5 XRP, 3600s settle delay)...')
-  const { txBlob, txHash: preparedHash } = await prepareOpenChannelTransaction({
-    wallet: payer,
-    destination: server.address,
-    amount: '5000000', // 5 XRP in drops
-    settleDelay: 3600,
-    network: NETWORK,
-  })
-  log.success('Tx signed (not submitted)')
-  log.key('Prepared tx hash', preparedHash)
   log.separator()
 
   // ── Phase 3: Server setup ─────────────────────────────────────────────────
@@ -220,7 +205,14 @@ async function main() {
   log.separator()
 
   // ── Phase 4: Client opens the channel via MPP ─────────────────────────────
-  const clientMethod = clientChannel({ wallet: payer, network: NETWORK })
+  // Deposit and settle delay are the payer's call. The destination is not:
+  // it comes from the challenge, so nothing about the server is configured
+  // here.
+  const clientMethod = clientChannel({
+    wallet: payer,
+    network: NETWORK,
+    openChannel: { amount: '5000000', settleDelay: 3600 },
+  })
   // Upstream mppx 0.8.x re-clones the 402 while the credential is being
   // signed, which fails once the first clone has disturbed the body.
   bufferChallengeResponses()
@@ -228,10 +220,10 @@ async function main() {
 
   log.loading('Client opening channel via MPP (server will submit the tx)...')
 
-  // Pass action: 'open' and the signed blob as context.
-  // Mppx intercepts the 402 and passes context to createCredential().
+  // Just the action. Mppx intercepts the 402 and hands the challenge to
+  // createCredential(), which signs the PaymentChannelCreate from it.
   const openRes = await fetch(`http://localhost:${PORT}/open`, {
-    context: { action: 'open', openTransaction: txBlob },
+    context: { action: 'open' },
   } as any)
 
   if (!openRes.ok) {

@@ -1,6 +1,6 @@
 import { Credential, Store } from 'mppx'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { openChannel } from '../../sdk/src/channel/client/Channel.js'
+import { channel as clientChannel, openChannel } from '../../sdk/src/channel/client/Channel.js'
 import { close, channel as serverChannel } from '../../sdk/src/channel/server/Channel.js'
 import type { Wallet } from '../../sdk/src/utils/wallet.js'
 import { createFundedWallet, devnetSource, IT_NETWORK } from './devnet-helpers.js'
@@ -173,5 +173,77 @@ describe('integration: PayChannel lifecycle on devnet', () => {
       cumulative: '340000',
     })
     expect(two.status).toBe('success')
+  }, 360_000)
+  /**
+   * The whole open flow with nothing learned out of band: the server states
+   * the recipient in its challenge, the client builds the PaymentChannelCreate
+   * from it, and the server broadcasts it and reads back the channel id. No
+   * /info, no /register, no address configured on the client.
+   */
+  it('opens a channel from the challenge alone, then pays over it', async () => {
+    const payer = await createFundedWallet()
+    const store = Store.memory()
+
+    const server = serverChannel({
+      recipient: receiver.address,
+      network: NETWORK,
+      store,
+      storeDurability: 'process-local',
+    })
+    const client = clientChannel({
+      wallet: payer,
+      network: NETWORK,
+      // Terms are ours; the destination comes from the challenge.
+      openChannel: { amount: '4000000', settleDelay: 3600 },
+    })
+
+    const openChallengeObj = {
+      id: `int-open-${payer.address.slice(1, 9)}`,
+      realm: 'integration-test',
+      method: 'xrpl' as const,
+      intent: 'channel' as const,
+      expires: new Date(Date.now() + 300_000).toISOString(),
+      request: {
+        amount: '0',
+        channelId: '',
+        recipient: receiver.address,
+        methodDetails: { network: NETWORK },
+      },
+    }
+
+    const openBlob = await client.createCredential({
+      challenge: openChallengeObj as any,
+      context: { action: 'open' },
+    })
+    const openReceipt = await server.verify({
+      credential: Credential.deserialize(openBlob) as any,
+      request: openChallengeObj.request,
+    })
+    expect(openReceipt.status).toBe('success')
+
+    // "open:{channelId}:{txHash}"
+    const [, channelId] = String(openReceipt.reference).split(':')
+    expect(channelId).toMatch(/^[0-9A-F]{64}$/)
+
+    // Then an ordinary voucher over the channel the server just learned about.
+    const voucherChallenge = {
+      ...openChallengeObj,
+      id: `${openChallengeObj.id}-v1`,
+      request: {
+        ...openChallengeObj.request,
+        amount: '150000',
+        channelId,
+        methodDetails: { network: NETWORK, cumulativeAmount: '0' },
+      },
+    }
+    const voucherBlob = await client.createCredential({
+      challenge: voucherChallenge as any,
+      context: {},
+    })
+    const voucherReceipt = await server.verify({
+      credential: Credential.deserialize(voucherBlob) as any,
+      request: voucherChallenge.request,
+    })
+    expect(voucherReceipt.status).toBe('success')
   }, 360_000)
 })

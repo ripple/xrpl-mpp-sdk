@@ -441,6 +441,25 @@ export type ChannelClientConfig = {
    * precedence over this.
    */
   channelId?: string
+  /**
+   * Terms on which to open a channel, when an `open` credential is produced
+   * and no `openTransaction` was supplied.
+   *
+   * The SDK then builds the `PaymentChannelCreate` itself, taking the
+   * destination from the challenge's `recipient`. That is the point: a caller
+   * does not have to learn the merchant's address through a side channel
+   * before it can ask for the resource. How much to deposit and for how long
+   * are not in the challenge, and should not be -- they are the payer's own
+   * risk decisions, so they come from here.
+   */
+  openChannel?: {
+    /** Deposit, in drops. */
+    amount: string
+    /** `SettleDelay`, in seconds. Servers enforce a floor, commonly 3600. */
+    settleDelay: number
+    /** Optional deadline after which the channel can be reclaimed. */
+    cancelAfter?: Date | number | string
+  }
   /** XRPL network. */
   network?: NetworkId
   /** Custom WebSocket RPC URL. */
