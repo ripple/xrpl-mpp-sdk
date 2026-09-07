@@ -279,14 +279,24 @@ const data = await response.json()
 Same two call sites as charge: the **method instance** at startup, and the
 **per-request invocation** at the 402 point.
 
-The per-request call needs the `channelId`, which is not something the server
-invents: it comes from the client, which opens the channel on-chain and then
-tells the server about it. The funder's key does not need to be configured at
-all -- claims verify against the key the channel names on the ledger -- so one
-server serves any number of unrelated funders.
-How that arrives is up to you: the demos use a small `POST /setup` endpoint
-(`demo/channel-server.ts`), and the `open` action lets it flow through the 402
-itself (`demo/channel-server-open.ts`), with no side channel at all.
+Neither the funder's key nor the channel has to be configured, and a server
+serving callers it has not met cannot configure either: a client picks its
+channel key and receives its channel id from its own `PaymentChannelCreate`.
+So leave `publicKey` unset and pass `channelId: ''`. Claims then verify against
+the key each channel names on the ledger, every credential names the channel it
+pays through, and one server serves any number of unrelated funders. That is
+what `demo/channel-server.ts` does.
+
+The client side fills both gaps, since it has the facts: pass `channelId` to
+`xrpl.channel()` once the channel is open, or per request in the method
+context. It also tracks the cumulative it has signed per channel, so a
+challenge that names no channel -- and therefore reports no mark to resume
+from -- does not stall it after the first request.
+
+Pin `publicKey` only for a bilateral arrangement with one known funder, and a
+`channelId` only when the server decides which channel a route bills. The
+`open` action lets a channel be established through the 402 itself
+(`demo/channel-server-open.ts`), with no side channel at all.
 
 ```ts
 import { Mppx, Store } from 'mppx/server'
@@ -316,7 +326,10 @@ const mppx = Mppx.create({
 export async function handler(request: Request) {
   const result = await mppx['xrpl/session']({
     amount: '100000',
-    channelId: 'ABCD...',    // 64 hex, from the opened channel
+    // '' advertises no channel, which is what a server serving callers it has
+    // not met has to do: each credential names the channel it pays through.
+    // Set a channel id only when this route bills one you already know.
+    channelId: '',
     recipient: 'rYourAddress...',
   })(request)
 
@@ -334,7 +347,10 @@ import { channel } from 'xrpl-mpp-sdk/channel/client'
 
 const mppx = Mppx.create({
   methods: [
-    channel({ seed: 'sEdV...', network: 'testnet' }),
+    // `channelId` is what we opened. Pass it when the server advertises no
+    // channel of its own, which is the case for a server serving callers it
+    // cannot know in advance.
+    channel({ seed: 'sEdV...', channelId, network: 'testnet' }),
   ],
   // See "Challenge-safe fetch" below. Required on mppx 0.8.x.
   fetch: challengeSafeFetch(),

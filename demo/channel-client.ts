@@ -45,13 +45,17 @@ async function main() {
   await rawFetch('http://localhost:3000/setup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channelId, publicKey: wallet.publicKey }),
+    // Only the channel id, and only so the demo can close at the end. The
+    // server needs no key from us to verify claims.
+    body: JSON.stringify({ channelId }),
   })
-  log.success('Server configured')
+  log.success('Channel recorded with server')
   log.separator()
 
   // Patch fetch for auto 402 handling
-  const channelMethod = channel({ wallet, network: 'testnet' })
+  // The server advertises no channel, because it serves callers it cannot know
+  // in advance. We opened this one, so we name it.
+  const channelMethod = channel({ wallet, channelId, network: 'testnet' })
   // Upstream mppx 0.8.x re-clones the 402 while the credential is being
   // signed, which fails once the first clone has disturbed the body.
   bufferChallengeResponses()

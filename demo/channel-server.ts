@@ -1,7 +1,16 @@
 /**
  * PayChannel -- Server
- * Generates a recipient wallet, waits for client to set up channel, serves 402-gated resource.
+ * Generates a recipient wallet and serves a 402-gated resource over a channel.
  * Run: npx tsx demo/channel-server.ts
+ *
+ * Note what the payment path needs from the client, which is nothing. The
+ * method is built once at startup with no funder key and no channel id: a
+ * server cannot know either before a client opens a channel, and it does not
+ * have to. Claims verify against the key the channel names on the ledger, and
+ * each credential names its own channel.
+ *
+ * `POST /setup` survives only so this demo can print the cumulative and close
+ * at the end. Take it out and the paid requests still work.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { Mppx, Store } from 'mppx/server'
@@ -52,10 +61,25 @@ async function main() {
   log.separator()
 
   let channelId: string | null = null
-  let handler: any = null
   let claimCount = 0
   let latestCumulative = '0'
   const store = Store.memory()
+
+  // No publicKey: every channel is verified against its own on-ledger key.
+  // channelId '': the challenge pins no channel, so each credential names the
+  // one it pays through. Both are what an open service wants.
+  const channelMethod = channel({
+    recipient: wallet.address,
+    network: 'testnet',
+    store,
+    storeDurability: 'process-local',
+  })
+  const mppx = Mppx.create({ secretKey: demoSecretKey(), methods: [channelMethod] })
+  const handler = mppx['xrpl/session']({
+    amount: '100000',
+    channelId: '',
+    recipient: wallet.address,
+  })
 
   const httpServer = createServer(async (req, res) => {
     const path = req.url ?? '/'
@@ -77,33 +101,15 @@ async function main() {
           return
         }
 
-        const channelMethod = channel({
-          publicKey: body.publicKey,
-          recipient: wallet.address,
-          network: 'testnet',
-          store,
-          storeDurability: 'process-local',
-        })
-        const mppx = Mppx.create({ secretKey: demoSecretKey(), methods: [channelMethod] })
-        handler = mppx['xrpl/session']({
-          amount: '100000',
-          channelId,
-          recipient: wallet.address,
-        })
-
-        log.success(`Channel configured: ${channelId}`)
+        // Recorded for the closing claim and the cumulative readout below,
+        // not for verification: the method above already accepts this channel.
+        log.success(`Channel recorded for close: ${channelId}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: 'ok' }))
         return
       }
 
       if (method === 'GET' && path === '/resource') {
-        if (!handler) {
-          res.writeHead(503)
-          res.end('Channel not configured yet')
-          return
-        }
-
         log.request('GET', '/resource')
         const result = await handler(toWebRequest(req))
 
@@ -169,7 +175,7 @@ async function main() {
       'Endpoints:',
       '',
       'GET  /info      ->  server wallet address',
-      'POST /setup     ->  configure channel (channelId + publicKey)',
+      'POST /setup     ->  record channelId, for the closing claim only',
       'GET  /resource  ->  charge 0.1 XRP per claim',
       'GET  /summary   ->  final state + shutdown',
       '',

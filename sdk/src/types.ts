@@ -431,6 +431,16 @@ export type ChannelClientConfig = {
    * persist a config object that carries one.
    */
   seed?: string
+  /**
+   * Channel to pay through, used when a challenge names none.
+   *
+   * A server that accepts channels from callers it has not met has no channel
+   * to advertise, so the caller supplies the one it opened. Set this after
+   * `openChannel()` returns. A channel named in the challenge takes
+   * precedence, and a per-request `channelId` in the method context takes
+   * precedence over this.
+   */
+  channelId?: string
   /** XRPL network. */
   network?: NetworkId
   /** Custom WebSocket RPC URL. */
