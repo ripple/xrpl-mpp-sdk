@@ -1,7 +1,8 @@
-import { Credential, Store } from 'mppx'
+import { Credential, Receipt, Store } from 'mppx'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { charge as clientCharge } from '../../sdk/src/client/Charge.js'
 import { charge as serverCharge } from '../../sdk/src/server/Charge.js'
+import type { XrplReceiptFields } from '../../sdk/src/types.js'
 import type { Wallet } from '../../sdk/src/utils/wallet.js'
 import { createFundedWallet, devnetSource, IT_NETWORK } from './devnet-helpers.js'
 
@@ -80,5 +81,17 @@ describe('integration: XRP charge (pull mode) on devnet', () => {
     expect(receipt.status).toBe('success')
     expect(receipt.method).toBe('xrpl')
     expect(receipt.reference).toMatch(/^[0-9A-F]{64}$/)
+
+    // The settled hash under its own name, not only inside the
+    // method-specific `reference` a consumer has to guess the meaning of.
+    const xrplReceipt = receipt as typeof receipt & XrplReceiptFields
+    expect(xrplReceipt.txHash).toBe(receipt.reference)
+    expect(xrplReceipt.ledgerIndex).toBeTypeOf('number')
+
+    // And they survive the header, which is the only form a client sees.
+    const decoded = Receipt.deserialize(Receipt.serialize(receipt)) as typeof receipt &
+      XrplReceiptFields
+    expect(decoded.txHash).toBe(receipt.reference)
+    expect(decoded.ledgerIndex).toBe(xrplReceipt.ledgerIndex)
   }, 180_000)
 })

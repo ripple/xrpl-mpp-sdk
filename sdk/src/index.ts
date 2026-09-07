@@ -53,6 +53,7 @@ export type {
   TokenHolding,
   XrpCurrency,
   XrplCurrency,
+  XrplReceiptFields,
 } from './types.js'
 export { generatePreimageCondition } from './utils/escrow.js'
 export type {

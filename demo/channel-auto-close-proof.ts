@@ -41,6 +41,7 @@ import {
 import { channel as serverChannel } from '../sdk/src/channel/server/Channel.js'
 import { bufferChallengeResponses } from '../sdk/src/client/fetch.js'
 import { XRPL_RPC_URLS } from '../sdk/src/constants.js'
+import type { XrplReceiptFields } from '../sdk/src/types.js'
 import { storeKeys } from '../sdk/src/utils/keys.js'
 import { Wallet } from '../sdk/src/utils/wallet.js'
 import * as log from './log.js'
@@ -467,9 +468,9 @@ function startMarketplaceServer(args: {
         }
         const openResp = result.withReceipt(Response.json({ message: 'open ok' })) as Response
         const receiptHeader = openResp.headers.get('Payment-Receipt')
-        const receipt = Receipt.deserialize(receiptHeader ?? '')
-        const parts = receipt.reference.split(':')
-        channelId = parts[1] ?? null
+        const receipt = Receipt.deserialize(receiptHeader ?? '') as Receipt.Receipt &
+          XrplReceiptFields
+        channelId = receipt.channelId ?? null
         if (channelId) {
           voucherHandler = mppx['xrpl/session']({
             amount: '1',

@@ -1,4 +1,5 @@
 export { Expires, Mppx, Store } from 'mppx/server'
+export type { XrplReceiptFields } from '../types.js'
 export {
   assertCredentialHeaderSize,
   DEFAULT_MAX_CREDENTIAL_HEADER_BYTES,

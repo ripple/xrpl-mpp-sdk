@@ -2,6 +2,7 @@ import { Credential, Store } from 'mppx'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { channel as clientChannel, openChannel } from '../../sdk/src/channel/client/Channel.js'
 import { close, channel as serverChannel } from '../../sdk/src/channel/server/Channel.js'
+import type { XrplReceiptFields } from '../../sdk/src/types.js'
 import type { Wallet } from '../../sdk/src/utils/wallet.js'
 import { createFundedWallet, devnetSource, IT_NETWORK } from './devnet-helpers.js'
 
@@ -221,9 +222,16 @@ describe('integration: PayChannel lifecycle on devnet', () => {
     })
     expect(openReceipt.status).toBe('success')
 
-    // "open:{channelId}:{txHash}"
-    const [, channelId] = String(openReceipt.reference).split(':')
+    // Named fields, not a split of `reference`. `reference` keeps its old
+    // composite value, and is asserted here so it stays a compatible shape.
+    const openFields = openReceipt as typeof openReceipt & XrplReceiptFields
+    const { channelId } = openFields
+    // `expect` does not narrow, and the field is optional because a voucher
+    // receipt has no channel to report.
+    if (!channelId) throw new Error('open receipt carried no channelId')
     expect(channelId).toMatch(/^[0-9A-F]{64}$/)
+    expect(openFields.txHash).toMatch(/^[0-9A-F]{64}$/)
+    expect(openReceipt.reference).toBe(`open:${channelId}:${openFields.txHash}`)
 
     // Then an ordinary voucher over the channel the server just learned about.
     const voucherChallenge = {
