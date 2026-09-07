@@ -153,6 +153,17 @@ export function channel(parameters: channel.Parameters) {
         'allowUnverifiedChannels: true to acknowledge that explicitly.',
     )
   }
+  // Without a configured key the on-ledger `PublicKey` is the only key there
+  // is, so the lookup that reads it cannot also be turned off. The two options
+  // are independently reasonable and jointly meaningless.
+  if (!verifyChannelOnChain && !publicKey) {
+    throw new Error(
+      '[xrpl-mpp-sdk] verifyChannelOnChain: false requires `publicKey`. With no configured key, ' +
+        "claims are verified against the channel's on-ledger PublicKey, which needs the ledger " +
+        'lookup this flag disables. Either pass the funder key or leave on-chain verification on.',
+    )
+  }
+
   if (!verifyChannelOnChain) {
     warnOnce(
       'channel-onchain-verification-disabled',
@@ -335,16 +346,28 @@ export function channel(parameters: channel.Parameters) {
     // terms are used.
     assertRouteTermsMatch(challenge?.request, routeRequest)
 
-    // Bind the credential to its DID-encoded sender. The address derived from
-    // the configured channel publicKey must match the credential source --
-    // otherwise an attacker can replay claims under their own DID.
-    const expectedSenderAddress = classicAddressFromPublicKey(publicKey)
+    // The credential's DID-encoded sender must be the channel's funder, or an
+    // attacker replays another funder's claims under their own DID.
+    //
+    // That comparison is against the channel's on-ledger `Account`, so it
+    // happens in `assertChannelParties` once the lookup has run. It used to be
+    // made here against the address derived from the configured key, which is
+    // a different claim and a wrong one: the protocol lets a channel name any
+    // key, so a funder who dedicates a key pair to the channel -- as the
+    // ledger documentation suggests -- derives an address that is not their
+    // account.
+    //
+    // With the ledger switched off there is no `Account` to compare against,
+    // and the configured key is all that remains.
     const credentialSenderAddress = classicAddressFromDID(credential.source)
-    if (credentialSenderAddress !== expectedSenderAddress) {
-      throw verificationFailed(
-        'SOURCE_MISMATCH',
-        `Credential source ${credentialSenderAddress} does not match channel funder ${expectedSenderAddress}`,
-      )
+    if (!verifyChannelOnChain && publicKey) {
+      const keyDerivedFunder = classicAddressFromPublicKey(publicKey)
+      if (credentialSenderAddress !== keyDerivedFunder) {
+        throw verificationFailed(
+          'SOURCE_MISMATCH',
+          `Credential source ${credentialSenderAddress} does not match channel funder ${keyDerivedFunder}`,
+        )
+      }
     }
 
     if (store && channelId) {
@@ -408,29 +431,39 @@ export function channel(parameters: channel.Parameters) {
     const signature = payload.signature
     const requestedAmount = BigInt(challenge.request?.amount ?? '0')
 
-    // Verify the signature first: it is local and free, whereas the ledger
-    // lookup below opens a WebSocket. `credential.source` is unauthenticated and
-    // the funder address is public, so anyone can send a voucher with a garbage
-    // signature for a real channelId; checking the ledger first turned each such
-    // request into a round trip against this server and its rippled endpoint.
-    //
-    // Verifying against the configured key is equivalent to verifying against
-    // ledger truth: `assertChannelParties` below refuses any channel whose
-    // on-ledger PublicKey differs from it, so the two are necessarily equal for
-    // a voucher that gets accepted.
     const claimXrp = dropsToXrpString(payload.amount)
-    let isValid: boolean
-    try {
-      isValid = verifyPaymentChannelClaim(channelId, claimXrp, signature, publicKey)
-    } catch {
-      // xrpl.js throws on malformed or cross-curve signatures instead of
-      // returning false.
-      isValid = false
+    function assertClaimSignature(key: string): void {
+      let isValid: boolean
+      try {
+        isValid = verifyPaymentChannelClaim(channelId, claimXrp, signature, key)
+      } catch {
+        // xrpl.js throws on malformed or cross-curve signatures instead of
+        // returning false.
+        isValid = false
+      }
+      if (!isValid) {
+        throw invalidSignature('Claim signature verification failed')
+      }
     }
 
-    if (!isValid) {
-      throw invalidSignature('Claim signature verification failed')
-    }
+    // With a configured key, check the signature before anything else: it is
+    // local and free, whereas the lookup below opens a WebSocket.
+    // `credential.source` is unauthenticated and funder addresses are public,
+    // so anyone can send a voucher with a garbage signature for a real
+    // channelId, and checking the ledger first turned each such request into a
+    // round trip against this server and its rippled endpoint. Verifying
+    // against the configured key is sound here because
+    // `assertChannelParties` refuses any channel whose on-ledger PublicKey
+    // differs, so for an accepted voucher the two keys are the same.
+    //
+    // With no configured key there is nothing to check against yet, so the
+    // order inverts: the lookup runs, and the signature is verified against
+    // the channel's own key below. That is the cost of accepting arbitrary
+    // funders -- a forged signature for an unknown channelId is paid for with
+    // one lookup. Channel metadata is cached per channelId, so the repeat of a
+    // single fabricated ID is absorbed; a flood of distinct ones is not, and a
+    // public deployment should rate-limit ahead of this method.
+    if (publicKey) assertClaimSignature(publicKey)
 
     let verifiedMeta: CachedChannelMeta | undefined
     if (verifyChannelOnChain) {
@@ -443,11 +476,26 @@ export function channel(parameters: channel.Parameters) {
         lookup,
         forceRefresh: false,
       })
+      // The channel names the key its claims must verify against. Read it
+      // before the party checks, so a voucher signed by the wrong key is
+      // refused as a bad signature rather than as a mismatched funder.
+      if (!publicKey) {
+        if (!channelMeta.publicKey) {
+          throw verificationFailed(
+            'SUBMISSION_FAILED',
+            `Channel ${channelId} lookup returned no PublicKey, and no \`publicKey\` is ` +
+              'configured, so there is no key to verify claims against. A custom ' +
+              '`channelLookup` must surface PublicKey when the server accepts arbitrary funders.',
+          )
+        }
+        assertClaimSignature(channelMeta.publicKey)
+      }
       assertChannelParties({
         channelId,
         meta: channelMeta,
         recipient: expectedRecipient,
         configuredPublicKey: publicKey,
+        credentialSender: credentialSenderAddress,
       })
       assertChannelHealthy({
         channelId,
@@ -476,6 +524,7 @@ export function channel(parameters: channel.Parameters) {
           meta: refreshed,
           recipient: expectedRecipient,
           configuredPublicKey: publicKey,
+          credentialSender: credentialSenderAddress,
         })
         assertChannelHealthy({
           channelId,
@@ -542,8 +591,13 @@ export function channel(parameters: channel.Parameters) {
     // through the voucher path -- they never trigger doVerifyOpen. Without
     // this branch, the sweeper would never see those channels and the
     // server-side close would silently no-op.
-    if (!activeChannels.has(channelId)) {
-      activeChannels.set(channelId, publicKey)
+    // The key registered is the channel's own, from the lookup, falling back to
+    // the configured one when the ledger was not consulted. Registering the
+    // configured key unconditionally would give the sweeper the wrong key for
+    // every channel but one, and the close it builds would not verify.
+    const sweeperKey = verifiedMeta ? effectivePublicKey(verifiedMeta, publicKey) : publicKey
+    if (sweeperKey && !activeChannels.has(channelId)) {
+      activeChannels.set(channelId, sweeperKey)
     }
 
     // Report unsettled exposure to the operator. A voucher is a claim rather
@@ -606,10 +660,21 @@ export function channel(parameters: channel.Parameters) {
       throw channelDestinationMismatch('(pending)', expectedRecipient, decoded.Destination)
     }
 
-    if (decoded.PublicKey?.toUpperCase() !== publicKey.toUpperCase()) {
+    // The open action carries the `PaymentChannelCreate` itself, so the key the
+    // channel will name is readable here without a ledger round trip. A
+    // configured key stays an allowlist over it.
+    const openPublicKey = decoded.PublicKey
+    if (!openPublicKey) {
       throw verificationFailed(
         'SUBMISSION_FAILED',
-        `Channel PublicKey ${decoded.PublicKey} does not match expected ${publicKey}`,
+        'PaymentChannelCreate carries no PublicKey, so the channel would name no key to verify ' +
+          'claims against.',
+      )
+    }
+    if (publicKey && openPublicKey.toUpperCase() !== publicKey.toUpperCase()) {
+      throw verificationFailed(
+        'SUBMISSION_FAILED',
+        `Channel PublicKey ${openPublicKey} does not match expected ${publicKey}`,
       )
     }
 
@@ -733,7 +798,12 @@ export function channel(parameters: channel.Parameters) {
         const initialXrp = dropsToXrpString(initialAmount)
         let sigValid: boolean
         try {
-          sigValid = verifyPaymentChannelClaim(channelId, initialXrp, payload.signature, publicKey)
+          sigValid = verifyPaymentChannelClaim(
+            channelId,
+            initialXrp,
+            payload.signature,
+            openPublicKey,
+          )
         } catch {
           sigValid = false
         }
@@ -758,9 +828,10 @@ export function channel(parameters: channel.Parameters) {
         })
       }
 
-      // Register the channel with the auto-close sweeper. The funder publicKey
-      // is required to build the `PaymentChannelClaim` tx at close time.
-      activeChannels.set(channelId, publicKey)
+      // Register the channel with the auto-close sweeper, under the key the
+      // channel itself names: with no configured key that is the only one, and
+      // with one it is the same key by the allowlist check above.
+      activeChannels.set(channelId, openPublicKey)
 
       return Receipt.from({
         method: 'xrpl',
@@ -902,39 +973,45 @@ function effectiveTtl(meta: CachedChannelMeta, ttlMs: number): number {
  * monotonicity holds. Service is granted, yet the claims are unredeemable and
  * the funder recovers everything once `SettleDelay` elapses.
  *
- * The funder identity is taken from the ledger too. The configured `publicKey`
- * is treated as an optional allowlist rather than the source of truth, so
- * verification is against ledger state and multi-funder deployments work.
+ * The funder identity is taken from the ledger too: the credential's sender
+ * must be the channel's `Account`. Binding it to an address derived from the
+ * channel key instead would be a different and weaker claim -- the protocol
+ * lets a channel name any key, so a funder who dedicates a key pair to the
+ * channel has a key that derives some address they do not control.
+ *
+ * A configured `publicKey` is an allowlist and nothing more. When it is absent
+ * every funder is acceptable and each channel is verified against its own key,
+ * which is what an open service needs.
  */
 function assertChannelParties(params: {
   channelId: string
   meta: CachedChannelMeta
   recipient: string | undefined
-  configuredPublicKey: string
+  configuredPublicKey: string | undefined
+  credentialSender: string
 }): void {
-  const { channelId, meta, recipient, configuredPublicKey } = params
+  const { channelId, meta, recipient, configuredPublicKey, credentialSender } = params
 
   if (recipient !== undefined && meta.destination !== recipient) {
     throw channelDestinationMismatch(channelId, recipient, meta.destination)
   }
 
   if (
+    configuredPublicKey !== undefined &&
     meta.publicKey !== null &&
     meta.publicKey.toUpperCase() !== configuredPublicKey.toUpperCase()
   ) {
     throw verificationFailed(
       'SOURCE_MISMATCH',
       `Channel ${channelId} is funded by public key ${meta.publicKey}, which is not the ` +
-        'configured channel publicKey. Claims are verified against the on-ledger key.',
+        'configured channel publicKey.',
     )
   }
 
-  const funderFromKey = classicAddressFromPublicKey(effectivePublicKey(meta, configuredPublicKey))
-  if (meta.account !== funderFromKey) {
+  if (meta.account !== credentialSender) {
     throw verificationFailed(
       'SOURCE_MISMATCH',
-      `Channel ${channelId} account ${meta.account} does not match the address derived from ` +
-        `its channel public key (${funderFromKey}).`,
+      `Credential source ${credentialSender} does not match channel funder ${meta.account}`,
     )
   }
 }
@@ -945,7 +1022,10 @@ function assertChannelParties(params: {
  * implementations may omit the field, so the configured key remains the
  * fallback rather than a hard requirement.
  */
-function effectivePublicKey(meta: CachedChannelMeta, configuredPublicKey: string): string {
+function effectivePublicKey(
+  meta: CachedChannelMeta,
+  configuredPublicKey: string | undefined,
+): string | undefined {
   return meta.publicKey ?? configuredPublicKey
 }
 

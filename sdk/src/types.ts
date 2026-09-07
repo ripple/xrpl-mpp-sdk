@@ -439,11 +439,25 @@ export type ChannelClientConfig = {
 
 export type ChannelServerConfig = {
   /**
-   * Channel funder's public key, used as an allowlist and as the fallback
-   * verification key. Claims verify against the channel's on-ledger
-   * `PublicKey` when available, so ledger state is the source of truth.
+   * Optional allowlist: the single channel key this server will accept.
+   *
+   * Leave it unset to accept channels from any funder, which is what an open
+   * service needs -- a client's channel key is chosen in its own
+   * `PaymentChannelCreate` and cannot be known before it opens one. Claims
+   * then verify against the channel's on-ledger `PublicKey`, read through
+   * {@link channel.Parameters.channelLookup}, and each channel is verified
+   * against its own key.
+   *
+   * Set it only for a bilateral arrangement where one known funder's key was
+   * exchanged in advance: a channel whose on-ledger `PublicKey` differs is
+   * then refused with `SOURCE_MISMATCH`. It is also the verification key when
+   * `verifyChannelOnChain` is off, which is why that mode requires it.
+   *
+   * Note this is the key named in the channel, not the funder's account key.
+   * The protocol lets those differ, and a funder is encouraged to dedicate a
+   * key pair to the channel.
    */
-  publicKey: string
+  publicKey?: string
   /**
    * Address this server expects to be paid: the channel's on-ledger
    * `Destination`. A channel pointing anywhere else is rejected with

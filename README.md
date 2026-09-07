@@ -279,9 +279,11 @@ const data = await response.json()
 Same two call sites as charge: the **method instance** at startup, and the
 **per-request invocation** at the 402 point.
 
-The method instance needs the funder's `publicKey`, and the per-request call
-needs the `channelId`. Neither is something the server invents -- both come from
-the client, which opens the channel on-chain and then tells the server about it.
+The per-request call needs the `channelId`, which is not something the server
+invents: it comes from the client, which opens the channel on-chain and then
+tells the server about it. The funder's key does not need to be configured at
+all -- claims verify against the key the channel names on the ledger -- so one
+server serves any number of unrelated funders.
 How that arrives is up to you: the demos use a small `POST /setup` endpoint
 (`demo/channel-server.ts`), and the `open` action lets it flow through the 402
 itself (`demo/channel-server-open.ts`), with no side channel at all.
@@ -295,7 +297,9 @@ const mppx = Mppx.create({
   secretKey: process.env.MPP_SECRET_KEY,
   methods: [
     channel({
-      publicKey: 'ED...',      // channel funder's public key, from the client
+      // publicKey is optional: set it only to restrict this server to one
+      // known funder's channel key. Left out, any funder is accepted and each
+      // channel is verified against its own on-ledger key.
       recipient: 'rYourAddress...', // the address the channel must pay
       network: 'testnet',
       store: Store.memory(),   // tracks cumulative amounts (development only)
@@ -461,7 +465,7 @@ charge({
 
 ```ts
 channel({
-  publicKey: string,                // funder key: allowlist + fallback verification key
+  publicKey?: string,               // optional allowlist: restrict to one funder's channel key
   recipient?: string,               // address the channel must pay (defaults to wallet/seed address)
   network?: 'mainnet' | 'testnet' | 'devnet',
   rpcUrl?: string,
@@ -486,8 +490,8 @@ When `verifyChannelOnChain` is on (the default), the first voucher per channel c
 **The channel is verified against ledger state, not configuration.** Before any claim is honoured:
 
 - **`Destination` must equal `recipient`.** Otherwise the channel pays someone else and its claims can never be redeemed here. Mismatches surface as `CHANNEL_DESTINATION_MISMATCH`. This is the difference between a valid-looking voucher and a collectable one: without the check, a funder can open a channel to their own address, sign perfectly valid cumulative claims, receive service indefinitely, and reclaim every drop once `SettleDelay` elapses.
-- **Claims verify against the channel's on-ledger `PublicKey`**, not the configured one. The configured `publicKey` acts as an allowlist and as a fallback when a custom `channelLookup` omits the field. Because the key comes from the ledger, multi-funder deployments work without reconfiguration.
-- **`Account` must derive from that public key**, so the funder identity is internally consistent.
+- **Claims verify against the channel's on-ledger `PublicKey`**, not against configuration. `publicKey` is an optional allowlist, and the fallback when a custom `channelLookup` omits the field. Leaving it unset is what an open service wants: a client's channel key is chosen in its own `PaymentChannelCreate` and cannot be known before it opens one.
+- **The credential's sender must equal the channel's `Account`.** Not an address derived from the channel key: the protocol lets a channel name any key, and a funder is encouraged to dedicate a key pair to it, so those two addresses legitimately differ.
 
 `recipient` defaults to the address of `wallet` / `seed` when either is supplied, and passing both with different addresses is rejected at construction. Supplying none of the three skips the destination check and emits a warning.
 

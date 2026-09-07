@@ -2,8 +2,7 @@
  * Minimal XRPL MPP channel server.
  *
  * Usage:
- *   XRPL_CHANNEL_RECIPIENT=rxxx XRPL_CHANNEL_PUBKEY=EDxxx \
- *     npx tsx examples/channel-server.ts
+ *   XRPL_CHANNEL_RECIPIENT=rxxx npx tsx examples/channel-server.ts
  *
  * The client opens the channel and POSTs { channelId } to /setup.
  * Then GET /resource is 402-gated via off-chain PayChannel claims.
@@ -14,6 +13,12 @@
  * open a channel to their own address, pass that address, and every check would
  * agree while the claims stayed unredeemable by this server.
  *
+ * The funder's channel key is the opposite case: it is not configured, because
+ * a server cannot know it before a client opens a channel. Claims verify
+ * against the key the channel names on the ledger, so this one server accepts
+ * channels from any number of unrelated funders. Pass `publicKey` only to
+ * restrict it to a single known one.
+ *
  * Test with:
  *   npx tsx examples/channel-client.ts
  */
@@ -22,16 +27,12 @@ import { Mppx, Store } from 'mppx/server'
 import { channel } from '../sdk/src/channel/server/Channel.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
-const PUBKEY = process.env.XRPL_CHANNEL_PUBKEY
 // Server-side configuration: the address the channel must pay. Never accepted
 // from a request body.
 const RECIPIENT = process.env.XRPL_CHANNEL_RECIPIENT
 
-if (!PUBKEY || !RECIPIENT) {
-  console.error(
-    'Usage: XRPL_CHANNEL_RECIPIENT=rxxx XRPL_CHANNEL_PUBKEY=EDxxx ' +
-      'npx tsx examples/channel-server.ts',
-  )
+if (!RECIPIENT) {
+  console.error('Usage: XRPL_CHANNEL_RECIPIENT=rxxx npx tsx examples/channel-server.ts')
   process.exit(1)
 }
 
@@ -81,7 +82,6 @@ const server = createServer(async (req, res) => {
       secretKey,
       methods: [
         channel({
-          publicKey: PUBKEY,
           recipient: RECIPIENT,
           network: 'testnet',
           store,
