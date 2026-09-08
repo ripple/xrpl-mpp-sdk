@@ -318,6 +318,31 @@ export function channel(parameters: channel.Parameters) {
     // terms are used.
     assertRouteTermsMatch(challenge?.request, routeRequest)
 
+    // The challenge must name the ledger, and name this one. The schema marks
+    // `network` required, but mppx casts the challenge request rather than
+    // parsing it on this path, so the schema alone enforces nothing here.
+    //
+    // Absent, the two sides each fall back to their own default and can
+    // differ silently: a claim signed for a channel the client believes is on
+    // one ledger, verified and redeemed by a server on another. Present but
+    // different is the same divergence stated out loud, and reachable when
+    // two deployments share a secret and settle on different networks.
+    const challengeNetwork = (challenge?.request?.methodDetails as { network?: string } | undefined)
+      ?.network
+    if (!challengeNetwork) {
+      throw verificationFailed(
+        'SUBMISSION_FAILED',
+        'Challenge carries no `methodDetails.network`. A session challenge must name the ledger ' +
+          'it settles on, so that both sides agree on which one that is.',
+      )
+    }
+    if (challengeNetwork !== network) {
+      throw verificationFailed(
+        'SUBMISSION_FAILED',
+        `Challenge is for the ${challengeNetwork} network but this server settles on ${network}.`,
+      )
+    }
+
     // The credential's DID-encoded sender must be the channel's funder, or an
     // attacker replays another funder's claims under their own DID.
     //
@@ -453,10 +478,27 @@ export function channel(parameters: channel.Parameters) {
       })
       assertSettleDelay({ channelId, meta: channelMeta, minSettleDelay })
       verifiedMeta = channelMeta
-      let channelBalance = BigInt(channelMeta.amount)
+      // A claim delivers `claimed - Balance` on redemption, so one at or below
+      // `Balance` delivers nothing: the channel has already paid out that
+      // much. Monotonicity alone does not catch it, because that compares
+      // against this server's own mark, and `Balance` moves ahead of the mark
+      // whenever a claim is redeemed outside this exchange.
+      const delivered = BigInt(channelMeta.balance)
+      if (newCumulative <= delivered) {
+        throw verificationFailed(
+          'AMOUNT_MISMATCH',
+          `Cumulative ${newCumulative} is not above the ${delivered} drops this channel has ` +
+            'already delivered, so redeeming it would transfer nothing.',
+        )
+      }
+
+      // Named for what it holds: the channel's total deposit, which bounds any
+      // cumulative claim. `Balance` is what has already been delivered and is
+      // not subtracted from it -- doing so would reject valid claims.
+      let channelFunded = BigInt(channelMeta.amount)
       // Cumulative exceeds the cached balance: re-fetch once -- the funder may
       // have topped up via PaymentChannelFund since we last looked.
-      if (newCumulative > channelBalance) {
+      if (newCumulative > channelFunded) {
         const refreshed = await loadChannelMetadata({
           channelId,
           keys,
@@ -480,9 +522,9 @@ export function channel(parameters: channel.Parameters) {
           settlementMarginMs,
         })
         verifiedMeta = refreshed
-        channelBalance = BigInt(refreshed.amount)
-        if (newCumulative > channelBalance) {
-          throw channelExhausted(channelId, newCumulative, channelBalance)
+        channelFunded = BigInt(refreshed.amount)
+        if (newCumulative > channelFunded) {
+          throw channelExhausted(channelId, newCumulative, channelFunded)
         }
       }
     }
