@@ -86,12 +86,20 @@ export const channel = Method.from({
       description: z.optional(z.string()),
       /** Merchant-provided reconciliation ID. */
       externalId: z.optional(z.string()),
-      /** Method-specific details injected by the server. */
+      /**
+       * Method-specific details injected by the server.
+       *
+       * Optional here because this schema validates what a route supplies,
+       * and the server fills `network` in its `request` hook rather than
+       * making every route repeat what the server already knows. The
+       * emitted challenge always carries it, and a challenge that reaches
+       * verification without one is refused there.
+       */
       methodDetails: z.optional(
         z.object({
           /** Server-generated unique tracking ID. */
           reference: z.optional(z.string()),
-          /** XRPL network identifier. */
+          /** XRPL network identifier. Always present on an emitted challenge. */
           network: z.optional(z.string()),
           /** Cumulative amount already committed up to this point (drops). */
           cumulativeAmount: z.optional(z.string()),
