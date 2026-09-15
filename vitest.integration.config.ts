@@ -18,9 +18,11 @@ export default defineConfig({
     hookTimeout: 180_000,
     include: ['test/integration/**/*.test.ts'],
     // Integration tests serialise so they don't fight over devnet rate limits.
+    // Vitest 4 dropped `poolOptions.forks.singleFork`; one worker plus no file
+    // parallelism is the same thing, and unlike the old key it is still read.
     fileParallelism: false,
     pool: 'forks',
-    poolOptions: { forks: { singleFork: true } },
+    maxWorkers: 1,
     // No coverage from integration tests -- they assert correctness, not
     // line coverage.
     coverage: { enabled: false },

@@ -192,7 +192,7 @@ jobs:
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -215,7 +215,13 @@ jobs:
         # pnpm, so use cdxgen, which reads pnpm-lock.yaml directly. Pin the
         # spec version: cdxgen defaults to 1.7, which this pinned Trivy
         # release can't decode ("invalid specification version").
-        run: npx --yes @cyclonedx/cdxgen -t npm --spec-version 1.5 --output sbom.json
+        #
+        # Pin cdxgen itself too, so the SBOM does not depend on whatever the
+        # registry serves at run time. Deliberately not a dev dependency: it
+        # reads pnpm-lock.yaml to build the SBOM, so vendoring it would list
+        # the generator inside its own output, and its tree would then install
+        # in every CI job even though only this one produces an SBOM.
+        run: npx --yes @cyclonedx/cdxgen@12.8.4 -t npm --spec-version 1.5 --output sbom.json
 
       - name: Scan SBOM for vulnerabilities using Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
@@ -535,15 +541,18 @@ jobs:
 
       # Must run after checkout: it reads the packageManager field from the
       # checked-out package.json to know which pnpm version to install.
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          # npm Trusted Publishing (OIDC) requires Node >=22.14.0 and is only
-          # implemented in the npm CLI, not pnpm -- see the "Publish to npm"
-          # step below, which uses `npm publish` for this reason.
-          node-version: '22'
+          # npm Trusted Publishing (OIDC) is only implemented in the npm CLI,
+          # not pnpm -- see the "Publish to npm" step below, which uses
+          # `npm publish` for this reason. It needs npm >=11.5.1, and Node 24
+          # is the oldest line that ships one (24.5.0 carries npm 11.5.1), so
+          # the CLI comes from the Node tarball setup-node already verifies
+          # rather than from a global install resolved at run time.
+          node-version: '24'
           cache: pnpm
           registry-url: 'https://registry.npmjs.org/'
 
@@ -571,9 +580,8 @@ jobs:
             exit 1
           fi
           # pnpm publish does not implement npm's Trusted Publishing (OIDC)
-          # handshake -- only the npm CLI does, and only >=11.5.1. Install it
-          # and publish the tarball pnpm already built with it instead.
-          npm i -g npm@11.6.0
+          # handshake -- only the npm CLI does. Publish the tarball pnpm
+          # already built with the npm that ships with Node 24 instead.
           npm publish "${PKG}" --provenance --access public --registry=https://registry.npmjs.org/ --tag "$NPM_DIST_TAG"
 
       - name: Ensure Git tag exists
