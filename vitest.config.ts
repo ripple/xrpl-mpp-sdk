@@ -15,7 +15,9 @@ export default defineConfig({
     exclude: ['test/integration/**', 'node_modules/**', 'dist/**'],
     // The mppx response-clone hazard only bites once the unread clone is
     // collected, so reproducing it needs a deliberate collection rather than a
-    // wait. Tests that use it skip themselves when it is unavailable.
-    poolOptions: { forks: { execArgv: ['--expose-gc'] } },
+    // wait. Tests that use it skip themselves when `globalThis.gc` is absent,
+    // which is why this has to stay a top-level key: Vitest 4 removed
+    // `test.poolOptions` and ignores it in silence, taking three tests with it.
+    execArgv: ['--expose-gc'],
   },
 })
