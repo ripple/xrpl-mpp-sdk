@@ -33,6 +33,29 @@ const CODE_FOR_FIELD: Record<PricedField, 'AMOUNT_MISMATCH' | 'SUBMISSION_FAILED
 }
 
 /**
+ * The channel a session voucher settles on, compared apart from the priced
+ * fields for two reasons. Hex is case-insensitive as a value, so a literal
+ * comparison would refuse a route and a challenge that agree. And `''` is how a
+ * route states it pins no channel, which is the open flow, rather than a term it
+ * demands.
+ */
+function assertChannelMatches(
+  challengeRequest: Record<string, unknown>,
+  routeRequest: Record<string, unknown>,
+): void {
+  const expected = routeRequest.channelId
+  if (typeof expected !== 'string' || expected === '') return
+
+  const presented = challengeRequest.channelId
+  if (typeof presented === 'string' && canonicalHex(presented) === canonicalHex(expected)) return
+
+  throw verificationFailed(
+    'SUBMISSION_FAILED',
+    `Challenge channelId ${describe(presented)} does not match the ${describe(expected)} this route requires`,
+  )
+}
+
+/**
  * `methodDetails` keys the verifier acts on, so a route that sets one is making
  * a demand rather than a suggestion.
  *
@@ -89,6 +112,8 @@ export function assertRouteTermsMatch(
       `Challenge ${field} ${describe(presented)} does not match the ${describe(expected)} this route requires`,
     )
   }
+
+  assertChannelMatches(challengeRequest, routeRequest)
 
   // The priced fields decide what is owed; these decide where it lands and what
   // it is bound to. A challenge issued for a route that sets neither tag, then
