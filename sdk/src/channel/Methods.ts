@@ -29,8 +29,8 @@ const CLASSIC_ADDRESS = /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/
  * The wire `intent` is the canonical MPP `session` intent (mpp.dev: pay-as-you-go
  * over a payment channel). The underlying mechanism is an XRPL Payment Channel,
  * so the SDK keeps the "channel" name for its own API, exports, and helpers.
- * The server/client wrappers register `alias: 'channel'` so credentials issued
- * against the pre-`session` wire intent still route and verify.
+ * The server wrapper registers `alias: 'channel'` so credentials issued against
+ * the pre-`session` wire intent still route and verify.
  */
 export const channel = Method.from({
   name: 'xrpl',

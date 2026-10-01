@@ -244,4 +244,35 @@ describe('charge server -- LastLedgerSequence vs challenge.expires enforcement',
       method.verify({ credential: cred as any, request: challenge.request }),
     ).rejects.toThrow(/carries no expires/)
   })
+
+  it('rejects a challenge whose expires cannot be parsed', async () => {
+    // An unparseable timestamp reaches the same state as a missing one, and
+    // silently: `Date.parse` yields NaN, every comparison against it is false,
+    // so the freshness check passes and the bounds derived from it no-op. The
+    // guard that refuses it had no test, which a mutation sweep surfaced.
+    const payer = Wallet.generate()
+    const recipient = Wallet.generate()
+    const tx = {
+      ...basePayment(payer, recipient.classicAddress, '1000000'),
+      LastLedgerSequence: 100_000_000,
+    }
+    const { challenge, cred } = buildCharge({
+      payer,
+      recipient,
+      amount: '1000000',
+      tx,
+      expires: 'not-a-timestamp',
+    })
+    const method = serverCharge({
+      recipient: recipient.classicAddress,
+      store: Store.memory(),
+      storeDurability: 'process-local',
+      network: NETWORK,
+      pollTimeout: 100,
+      pollInterval: 50,
+    })
+    await expect(
+      method.verify({ credential: cred as any, request: challenge.request }),
+    ).rejects.toThrow(/malformed expires/)
+  })
 })

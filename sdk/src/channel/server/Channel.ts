@@ -16,7 +16,7 @@ import {
 import type { ChannelServerConfig } from '../../types.js'
 import { dropsToXrpString } from '../../utils/amount.js'
 import { classicAddressFromDID } from '../../utils/did.js'
-import { type StoreKeys, storeKeys } from '../../utils/keys.js'
+import { canonicalHex, type StoreKeys, storeKeys } from '../../utils/keys.js'
 import { assertTxExpiresWithinChallenge, readCurrentLedgerIndex } from '../../utils/ledger-time.js'
 import { assertRouteTermsMatch } from '../../utils/route.js'
 import {
@@ -318,9 +318,29 @@ export function channel(parameters: channel.Parameters) {
     // terms are used.
     assertRouteTermsMatch(challenge?.request, routeRequest)
 
-    // The challenge must name the ledger, and name this one. The schema marks
-    // `network` required, but mppx casts the challenge request rather than
-    // parsing it on this path, so the schema alone enforces nothing here.
+    // Redeem against the channel that was asked for. The channel comes from the
+    // payload, which the payer controls, so without this a payer presented with
+    // a challenge naming one channel can sign a valid claim on another of its
+    // own and be served. The recipient and funder checks still hold, so the
+    // money is not at stake; the pinning is, and a server that tracks terms or
+    // a budget per channel depends on it.
+    //
+    // An empty `channelId` is how a challenge says no channel is pinned, which
+    // is the open flow, so it leaves the choice to the payer.
+    const pinnedChannelId = (challenge?.request as { channelId?: unknown } | undefined)?.channelId
+    if (typeof pinnedChannelId === 'string' && pinnedChannelId !== '') {
+      if (canonicalHex(pinnedChannelId) !== canonicalHex(channelId)) {
+        throw verificationFailed(
+          'SUBMISSION_FAILED',
+          `Credential settles on channel ${channelId} but the challenge names ${pinnedChannelId}.`,
+        )
+      }
+    }
+
+    // The challenge must name the ledger, and name this one. The request schema
+    // leaves `network` optional, because a route states the price while the
+    // server fills the ledger in its own `request` hook, so this runtime check
+    // is the only thing enforcing it.
     //
     // Absent, the two sides each fall back to their own default and can
     // differ silently: a claim signed for a channel the client believes is on
@@ -1101,7 +1121,12 @@ export type ChannelVoucherState = {
   cumulative: string
   /** Total funded on the channel, in drops. */
   fundedDrops: string
-  /** Funded minus cumulative: what a close would still yield, in drops. */
+  /**
+   * Funded minus cumulative: how much of the deposit no voucher has claimed
+   * yet, in drops. This is headroom for later vouchers, not revenue. A close
+   * pays the recipient the cumulative it has been authorised for, less what the
+   * channel already delivered, and returns this amount to the funder.
+   */
   remainingDrops: string
   /** `Expiration` or `CancelAfter`, whichever is set, as ISO-8601. */
   closesAt?: string
@@ -1483,6 +1508,31 @@ function resolveAutoCloseConfig(
  * - Errors per channel are isolated: a failing close on one channel does
  *   not stop the loop nor affect other channels.
  */
+/**
+ * Whether the sweeper should post a claim for a channel whose stored mark is
+ * this old.
+ *
+ * `timestamp` is optional in `StoredHighWater`, and a missing one must not read
+ * as infinitely idle: that closes a live channel on the very first sweep and
+ * ignores `idleMs` entirely. Unknown means leave it alone, which costs nothing
+ * `autoClose` promises, since it is a convenience rather than a guarantee. A
+ * timestamp ahead of `now`, which clock skew between writers can produce, is
+ * not long-idle either.
+ *
+ * Exported for its tests, and deliberately absent from the package's barrel.
+ */
+export function shouldSweep(params: {
+  timestamp: number | undefined
+  idleMs: number
+  now: number
+}): boolean {
+  const { timestamp, idleMs, now } = params
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return false
+  const age = now - timestamp
+  if (age < 0) return false
+  return age >= idleMs
+}
+
 function startAutoCloseSweeper(args: {
   wallet: Wallet
   store: ReplayStore
@@ -1507,8 +1557,8 @@ function startAutoCloseSweeper(args: {
           }
           const state = parseOrNull(StoredHighWater, await store.get(keys.channel(channelId)))
           if (!state?.signature || BigInt(state.cumulative) === 0n) continue
-          const age = Date.now() - (state.timestamp ?? 0)
-          if (age < config.idleMs) continue
+          if (!shouldSweep({ timestamp: state.timestamp, idleMs: config.idleMs, now: Date.now() }))
+            continue
 
           const redeemed = parseOrNull(
             StoredRedeemed,
@@ -1563,7 +1613,8 @@ async function lookupChannel(
     const node = (response.result as { node?: unknown }).node
     if (node === undefined || node === null) return null
     // Parse the node's answer before any of it reaches a party or balance
-    // check. A malformed entry is treated as absent, which fails closed.
+    // check. A malformed entry is refused outright rather than read; only a
+    // genuinely absent one returns null.
     const parsed = PayChannelEntry.safeParse(node)
     if (!parsed.success) {
       throw verificationFailed(

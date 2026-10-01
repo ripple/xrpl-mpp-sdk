@@ -189,7 +189,7 @@ describe('channel liveness', () => {
   })
 
   describe('exposure reporting', () => {
-    it('reports remaining redeemable value and close time', async () => {
+    it('reports the deposit still unclaimed, and the close time', async () => {
       const onVoucherAccepted = vi.fn()
       const closesAt = rippleTimeIn(3_600_000)
       const lookup = vi.fn(async () => entry({ CancelAfter: closesAt }))
@@ -201,11 +201,32 @@ describe('channel liveness', () => {
           channelId: CHANNEL_ID,
           cumulative: '2500000',
           fundedDrops: '10000000',
-          // 10 XRP funded, 2.5 credited, so 7.5 still redeemable.
+          // 10 XRP deposited, 2.5 authorised, so 7.5 of the deposit is still
+          // unclaimed. That is headroom for later vouchers, not revenue: a
+          // close pays the server the 2.5 it has been authorised for, and
+          // returns the 7.5 to the funder.
           remainingDrops: '7500000',
         }),
       )
       expect(onVoucherAccepted.mock.calls[0][0].closesAt).toBeTypeOf('string')
+    })
+
+    it('measures the unclaimed deposit from Amount alone, not from Balance', async () => {
+      // Pins which of three plausible readings `remainingDrops` carries, on a
+      // channel that has already delivered, where they differ:
+      //   Amount - cumulative             = 4000000  <- what it means
+      //   cumulative - Balance            = 2000000  <- what a close yields
+      //   Amount - cumulative - Balance   = 0        <- double-counting
+      // The field's own description claimed the second for a while, which would
+      // have an operator read their revenue as the money going back.
+      const onVoucherAccepted = vi.fn()
+      const lookup = vi.fn(async () => entry({ Amount: '10000000', Balance: '4000000' }))
+
+      await verify(method(lookup, { onVoucherAccepted }), voucher('6000000'))
+
+      expect(onVoucherAccepted).toHaveBeenCalledWith(
+        expect.objectContaining({ fundedDrops: '10000000', remainingDrops: '4000000' }),
+      )
     })
   })
 })
