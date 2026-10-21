@@ -131,6 +131,10 @@ export type AgentEvent =
   | { type: 'agent_finished'; rounds: number }
 
 export type AgentRunResult = {
+  /**
+   * Claude's answer. If `maxToolRounds` runs out right after a tool call, it is
+   * that call's output instead, since Claude never saw it.
+   */
   finalText: string
   toolCalls: Array<{ input: unknown; result: CallServiceResult }>
   totalDropsSpent: bigint
@@ -161,6 +165,7 @@ export async function runAgent(args: AgentArgs): Promise<AgentRunResult> {
   const receipts: AgentRunResult['receipts'] = []
   let finalText = ''
   let lastRound = 0
+  let lastRoundFirstCall = 0
 
   for (let round = 1; round <= maxRounds; round++) {
     lastRound = round
@@ -200,6 +205,7 @@ export async function runAgent(args: AgentArgs): Promise<AgentRunResult> {
     // turns see the tool_use blocks they're replying to.
     messages.push({ role: 'assistant', content: response.content })
 
+    lastRoundFirstCall = toolCalls.length
     const toolResults: Anthropic.ToolResultBlockParam[] = []
     for (const use of toolUses) {
       if (use.name !== LINKEDIN_TOOL.name) {
@@ -292,9 +298,23 @@ export async function runAgent(args: AgentArgs): Promise<AgentRunResult> {
     messages.push({ role: 'user', content: toolResults })
   }
 
-  // Loop budget exceeded -- return whatever we last got from the model.
+  // Loop budget exceeded. Tool calls made in the last round have already run
+  // (and a paid one has already settled), but Claude never saw their results,
+  // so `finalText` is still what it said before calling. Answer with what they
+  // returned instead: asking Claude to present it would be a model call past
+  // `maxToolRounds`.
+  const unseen = toolCalls.slice(lastRoundFirstCall)
+  if (unseen.length > 0) {
+    finalText = unseen.map(({ result }) => presentToolResult(result)).join('\n\n')
+  }
   args.onEvent?.({ type: 'agent_finished', rounds: lastRound })
   return { finalText, toolCalls, totalDropsSpent, receipts, rounds: lastRound }
+}
+
+/** What the user gets for a tool result Claude never had the chance to present. */
+function presentToolResult(result: CallServiceResult): string {
+  if (result.ok && result.post) return result.post.text
+  return `${LINKEDIN_TOOL.name} returned no post (HTTP ${result.status}).`
 }
 
 // ---------------------------------------------------------------------------
