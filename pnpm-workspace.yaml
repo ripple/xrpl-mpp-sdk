@@ -4,13 +4,10 @@
 overrides:
   esbuild: '>=0.28.1 <0.29.0'
   qs: '>=6.16.0'
-  # mppx declares this as an optional peer at `>=1.25.0`, and `autoInstallPeers`
-  # pulled it into the tree although nothing here uses MCP. The copy it picked
-  # carried five advisories, three of them high.
-  #
-  # What this override does is narrow that peer declaration, which leaves the
-  # optional peer unsatisfied, so pnpm stops installing it rather than upgrading
-  # it. That is the intended outcome: a consumer that actually uses MCP supplies
-  # its own copy, since it is their peer to satisfy. Verified on a clean install:
-  # the package is absent from the tree and `mppx/server` still loads.
+  # A floor, not a pin. mppx declares this as an optional peer at `>=1.25.0`,
+  # and under mppx 0.9.2 a copy carrying five advisories ended up in the tree.
+  # mppx 0.15 no longer pulls it, verified on a clean install, so this installs
+  # nothing today. It stays because it costs nothing while the package is absent
+  # and bounds the version if it ever returns. Overrides apply to this
+  # repository's own tree only, never to a consumer's.
   '@modelcontextprotocol/sdk': '>=1.32.0'
