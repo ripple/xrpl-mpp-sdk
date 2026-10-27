@@ -4,3 +4,13 @@
 overrides:
   esbuild: '>=0.28.1 <0.29.0'
   qs: '>=6.16.0'
+  # mppx declares this as an optional peer at `>=1.25.0`, and `autoInstallPeers`
+  # pulled it into the tree although nothing here uses MCP. The copy it picked
+  # carried five advisories, three of them high.
+  #
+  # What this override does is narrow that peer declaration, which leaves the
+  # optional peer unsatisfied, so pnpm stops installing it rather than upgrading
+  # it. That is the intended outcome: a consumer that actually uses MCP supplies
+  # its own copy, since it is their peer to satisfy. Verified on a clean install:
+  # the package is absent from the tree and `mppx/server` still loads.
+  '@modelcontextprotocol/sdk': '>=1.32.0'
