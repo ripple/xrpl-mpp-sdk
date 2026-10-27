@@ -4,10 +4,12 @@ version: 2
 # dependency tree, and the Actions this repository runs with write-capable
 # tokens at release time.
 #
-# The peer ranges are deliberately bounded (mppx <0.9.0, xrpl <5.0.0) because
-# mppx owns the HMAC challenge binding, so a major bump is a decision to make
+# The peer ranges are bounded at what the compatibility matrix exercises, which
+# is mppx <0.16.0 and xrpl <6.0.0, because mppx owns the HMAC challenge binding
+# and xrpl the signing primitives. Moving either end is a decision to make
 # explicitly rather than absorb. Dependabot will open those PRs; they must not be
-# merged without re-running the compatibility matrix.
+# merged without re-running the compatibility matrix, and the range in
+# package.json has to move with it or the new version is untested in practice.
 updates:
   - package-ecosystem: npm
     directory: /
